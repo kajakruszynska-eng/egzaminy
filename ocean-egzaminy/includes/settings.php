@@ -275,7 +275,7 @@ add_action( 'admin_post_oe_eksport_ustawien', function() {
     check_admin_referer( 'oe_eksport_ustawien' );
     $saved = get_option( OE_SETTINGS_OPTION, array() );
     $data  = array(
-        'plugin'   => 'ocean-egzaminy',
+        'plugin'   => 'zapisy-na-egzaminy',
         'version'  => OE_VERSION,
         'settings' => is_array( $saved ) ? $saved : array(),
         'rodzaje'  => array_values( array_map( 'oe_rodzaj_export', oe_rodzaje_all() ) ),

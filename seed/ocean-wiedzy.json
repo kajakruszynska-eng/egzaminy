@@ -1,5 +1,5 @@
 {
-    "plugin": "ocean-egzaminy",
+    "plugin": "zapisy-na-egzaminy",
     "version": "1.4.0",
     "settings": {
         "org_nazwa_pelna": "Fundacja propagowania sportów wodnych dla każdego Ocean Wiedzy",

@@ -8,7 +8,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * (decision numbers, venues, answer keys) is not here; it comes from the
  * settings import or is entered on the type screen.
  *
- * Generated from seed/ocean-wiedzy.json; keep the task order, the
+ * Generated from the seed file; keep the task order, the
  * deterministic draw depends on it.
  */
 function oe_rodzaje_standardowe() {
