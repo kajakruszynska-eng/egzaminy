@@ -309,10 +309,3 @@ add_action( 'admin_head', function() {
     </style>
     <?php
 } );
-
-// ── Upewnij się że sesja jest dostępna ───────────────────────────────────
-add_action( 'init', function() {
-    if ( ! is_admin() && session_status() === PHP_SESSION_NONE ) {
-        session_start();
-    }
-}, 1 );

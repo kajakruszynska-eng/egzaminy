@@ -74,11 +74,6 @@ if ( $mode === 'doc' ) {
     exit;
 }
 
-// Buffer all output, like a host with output_buffering on. Without it the signup
-// shortcode's session_start() fails because headers are already sent (known issue,
-// tracked separately; it is not caused by the code under test here).
-ob_start();
-
 echo 'PHP ' . PHP_VERSION . ', WordPress ' . get_bloginfo( 'version' ) . "\n";
 
 // ── Reset plugin state ──────────────────────────────────────────────────
@@ -205,6 +200,63 @@ ob_start();
 echo do_shortcode( '[formularz_egzaminu id="' . $eid . '"]' );
 $html = ob_get_clean();
 t_ok( strpos( $html, 'przez Fundację Ocean Wiedzy' ) !== false, 'signup form shows configured consent' );
+t_issues();
+
+// ── Signup submission: message handoff via transient + ?oe_msg= ─────────
+echo "[signup messages]\n";
+class OE_T_Redirect extends Exception {}
+function t_submit( $post ) {
+    $_POST = $post;
+    $catch = function( $location ) { throw new OE_T_Redirect( $location ); };
+    add_filter( 'wp_redirect', $catch, 1 );
+    $location = '';
+    try {
+        oe_obsluga_formularza();
+    } catch ( OE_T_Redirect $e ) {
+        $location = $e->getMessage();
+    }
+    remove_filter( 'wp_redirect', $catch, 1 );
+    $_POST = array();
+    return $location;
+}
+function t_render_after( $location, $eid ) {
+    $query = array();
+    parse_str( (string) wp_parse_url( $location, PHP_URL_QUERY ), $query );
+    $_GET = $query;
+    $html = do_shortcode( '[formularz_egzaminu id="' . $eid . '"]' );
+    $_GET = array();
+    return array( isset( $query['oe_msg'] ) ? $query['oe_msg'] : '', $html );
+}
+$form = array(
+    'oe_egzamin_id' => (string) $eid, 'oe_redirect' => home_url( '/egzamin/?oe_msg=stary' ),
+    'oe_nonce' => wp_create_nonce( 'oe_zapis_' . $eid ), 'oe_zgoda_rodo' => '1',
+    'oe_imie' => 'Olek', 'oe_nazwisko' => "O'Test", 'oe_data_urodzenia' => '1999-05-05', 'oe_miejsce_urodzenia' => 'Bytom',
+    'oe_ulica' => 'ul. Krótka 1', 'oe_kod' => '41-900', 'oe_miasto' => 'Bytom', 'oe_email' => 'zly-adres', 'oe_telefon' => '500 100 200',
+);
+$loc = t_submit( wp_slash( $form ) );
+list( $token, $html ) = t_render_after( $loc, $eid );
+t_ok( $token !== '' && $token !== 'stary' && substr_count( $loc, 'oe_msg=' ) === 1, 'error redirect carries one fresh oe_msg token' );
+t_ok( strpos( $html, 'oe-komunikat oe-blad' ) !== false && strpos( $html, 'Nieprawidłowy adres e-mail.' ) !== false, 'shortcode shows the error message' );
+t_ok( strpos( $html, 'value="Bytom"' ) !== false && strpos( $html, 'value="zly-adres"' ) !== false, 'shortcode restores submitted form data' );
+t_ok( strpos( $html, 'value="O&#039;Test"' ) !== false, 'restored data is unslashed' );
+t_ok( get_transient( 'oe_msg_' . $token ) === false, 'message transient deleted after display' );
+list( , $html ) = t_render_after( $loc, $eid );
+t_ok( strpos( $html, 'Nieprawidłowy adres e-mail.' ) !== false, 'second render in the same request still shows the message' );
+t_ok( oe_pobierz_komunikat( $eid ) === null, 'no message without oe_msg in the URL' );
+$other = wp_insert_post( array( 'post_type' => 'oe_egzamin', 'post_status' => 'publish', 'post_title' => 'Test inny' ) );
+$loc2  = t_submit( wp_slash( array_merge( $form, array( 'oe_imie' => '' ) ) ) );
+list( , $html ) = t_render_after( $loc2, $other );
+t_ok( strpos( $html, 'oe-komunikat' ) === false, 'message is not shown on another exam form' );
+wp_delete_post( $other, true );
+
+$GLOBALS['oe_t_mail'] = array();
+$loc = t_submit( wp_slash( array_merge( $form, array( 'oe_email' => 'olek@example.test' ) ) ) );
+list( $token, $html ) = t_render_after( $loc, $eid );
+t_ok( strpos( $html, 'oe-komunikat oe-sukces' ) !== false && strpos( $html, 'Zapis przyjęty!' ) !== false && strpos( $html, 'SM/001/T/2026' ) !== false, 'shortcode shows the success message' );
+t_ok( count( $GLOBALS['oe_t_mail'] ) === 2, 'successful signup sends 2 emails' );
+$nowe = get_posts( array( 'post_type' => 'oe_zapis', 'post_status' => 'oe_oczekuje', 'numberposts' => -1, 'fields' => 'ids' ) );
+t_ok( count( $nowe ) === 1, 'successful signup creates one pending oe_zapis' );
+foreach ( $nowe as $pid ) wp_delete_post( $pid, true );
 
 $draft = get_default_post_to_edit( 'oe_egzamin', true );
 ob_start();
