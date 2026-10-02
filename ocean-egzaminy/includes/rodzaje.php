@@ -416,8 +416,19 @@ function oe_metabox_rodzaj( $post ) {
     $t = oe_rodzaj_get( $post->ID );
     if ( ! $t ) $t = array_merge( oe_rodzaj_puste(), array( 'id' => 0, 'nazwa' => '' ) );
 
-    $sekcje   = $t['sekcje'];
-    $sekcje[] = array( 'nazwa' => '', 'min' => 0, 'max' => 0, 'zadania' => array() ); // one empty block for a new section
+    $sekcje = $t['sekcje'];
+    if ( ! $sekcje ) $sekcje[] = array( 'nazwa' => '', 'min' => 0, 'max' => 0, 'zadania' => array() ); // new type: one empty section
+
+    // Standard types for the "fill from standard" picker (tasks as editor lines).
+    $wzory = array();
+    foreach ( oe_rodzaje_standardowe() as $w ) {
+        $w = array_merge( oe_rodzaj_normalize( $w ), array( 'nazwa' => $w['nazwa'] ) );
+        $sek = array();
+        foreach ( $w['sekcje'] as $s ) {
+            $sek[] = array( 'nazwa' => $s['nazwa'], 'min' => $s['min'], 'max' => $s['max'], 'linie' => oe_rodzaj_linie_zadan( $s['zadania'] ) );
+        }
+        $wzory[] = array( 'nazwa' => $w['nazwa'], 'skrot' => $w['skrot'], 'karta_wiersze' => $w['karta_wiersze'], 'zgoda_rodzicow' => $w['zgoda_rodzicow'], 'liczba_pytan' => $w['liczba_pytan'], 'sekcje' => $sek );
+    }
 
     $klucz_txt = trim( chunk_split( $t['klucz'], 5, ' ' ) );
     $klucz_txt = implode( "\n", array_map( 'trim', str_split( $klucz_txt, 30 ) ) );
@@ -432,6 +443,19 @@ function oe_metabox_rodzaj( $post ) {
     </style>
     <div class="oe-rodzaj">
     <table class="form-table" role="presentation">
+        <tr>
+            <th scope="row"><label for="oe-r-wzor">Typ standardowy</label></th>
+            <td>
+                <select id="oe-r-wzor">
+                    <option value="">- wybierz -</option>
+                    <?php foreach ( $wzory as $i => $w ) : ?>
+                        <option value="<?php echo (int) $i; ?>"><?php echo esc_html( $w['skrot'] . ' - ' . $w['nazwa'] ); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <button type="button" class="button" id="oe-r-wzor-wczytaj">Wczytaj zadania i ustawienia</button>
+                <p class="description">Wypełnia skrót, wiersze karty, zgodę rodziców, liczbę pytań i wszystkie sekcje zadań praktycznych według ministerialnego wzoru. Numer decyzji, miejsca i klucz odpowiedzi uzupełnij sama. Zmiany zapisują się dopiero po kliknięciu „Opublikuj” albo „Aktualizuj”.</p>
+            </td>
+        </tr>
         <tr>
             <th scope="row"><label for="oe-r-skrot">Skrót</label></th>
             <td><input type="text" id="oe-r-skrot" name="oe_rodzaj[skrot]" value="<?php echo esc_attr( $t['skrot'] ); ?>" class="small-text" style="width:100px">
@@ -460,24 +484,15 @@ function oe_metabox_rodzaj( $post ) {
         <tr>
             <th scope="row">Zadania praktyczne</th>
             <td>
-                <p class="description" style="margin-top:0">Każda sekcja to osobna tabela na karcie i grupa kolumn w załączniku nr 2. Jedno zadanie w linii. Przedrostek <code>[zawsze]</code> = zawsze zaliczone, <code>[nigdy]</code> = nigdy nielosowane. Z pozostałych losuje się od „min” do „max” zadań na osobę. Aby usunąć sekcję, wyczyść jej nazwę i zadania. Po zapisaniu pojawi się kolejny pusty blok.</p>
+                <p class="description" style="margin-top:0">Każda sekcja to osobna tabela na karcie i grupa kolumn w załączniku nr 2. Jedno zadanie w linii. Przedrostek <code>[zawsze]</code> = zawsze zaliczone, <code>[nigdy]</code> = nigdy nielosowane. Z pozostałych losuje się od „min” do „max” zadań na osobę.</p>
                 <p class="description"><strong>Uwaga:</strong> losowanie zależy od kolejności zadań i sekcji. Zmiana kolejności, dodanie lub usunięcie zadania zmienia wylosowane zadania wszystkich uczestników tego typu, także w dokumentach generowanych ponownie dla minionych egzaminów.</p>
-                <?php foreach ( $sekcje as $i => $s ) :
-                    $lines = array();
-                    foreach ( $s['zadania'] as $z ) {
-                        $lines[] = ( $z['zawsze_poz'] ? '[zawsze] ' : ( $z['zawsze_nie'] ? '[nigdy] ' : '' ) ) . $z['nazwa'];
-                    }
-                    $base = 'oe_rodzaj[sekcje][' . $i . ']';
-                    ?>
-                    <div class="oe-sekcja">
-                        <div class="oe-sekcja-gora">
-                            <label style="flex:1;min-width:220px">Nazwa sekcji<input type="text" name="<?php echo esc_attr( $base ); ?>[nazwa]" value="<?php echo esc_attr( $s['nazwa'] ); ?>" placeholder="<?php echo $s['nazwa'] === '' ? 'nowa sekcja, np. manewry na silniku - zadania' : ''; ?>"></label>
-                            <label>Losuj min<input type="number" min="0" name="<?php echo esc_attr( $base ); ?>[min]" value="<?php echo (int) $s['min']; ?>" style="width:80px"></label>
-                            <label>max<input type="number" min="0" name="<?php echo esc_attr( $base ); ?>[max]" value="<?php echo (int) $s['max']; ?>" style="width:80px"></label>
-                        </div>
-                        <textarea name="<?php echo esc_attr( $base ); ?>[zadania]" rows="<?php echo max( 3, count( $lines ) ); ?>"><?php echo esc_textarea( implode( "\n", $lines ) ); ?></textarea>
-                    </div>
-                <?php endforeach; ?>
+                <div id="oe-sekcje">
+                <?php foreach ( $sekcje as $i => $s ) {
+                    oe_rodzaj_blok_sekcji( $i, $s['nazwa'], $s['min'], $s['max'], oe_rodzaj_linie_zadan( $s['zadania'] ) );
+                } ?>
+                </div>
+                <button type="button" class="button" id="oe-r-dodaj-sekcje">+ Dodaj sekcję</button>
+                <script type="text/html" id="oe-r-sekcja-wzor"><?php oe_rodzaj_blok_sekcji( '__i__', '', 0, 0, array() ); ?></script>
             </td>
         </tr>
         <tr>
@@ -497,7 +512,84 @@ function oe_metabox_rodzaj( $post ) {
         <?php oe_metabox_rodzaj_dokumenty( $t ); ?>
     </table>
     </div>
+    <script>
+    (function(){
+        var wzory = <?php echo wp_json_encode( $wzory ); ?>;
+        var box = document.getElementById('oe-sekcje');
+        var licznik = box.querySelectorAll('.oe-sekcja').length;
+
+        function dodajSekcje(nazwa, min, max, linie) {
+            var html = document.getElementById('oe-r-sekcja-wzor').innerHTML.replace(/__i__/g, 'n' + (licznik++));
+            var tmp = document.createElement('div');
+            tmp.innerHTML = html.trim();
+            var blok = tmp.firstChild;
+            blok.querySelector('.oe-s-nazwa').value = nazwa || '';
+            blok.querySelector('.oe-s-min').value = min || 0;
+            blok.querySelector('.oe-s-max').value = max || 0;
+            var ta = blok.querySelector('textarea');
+            ta.value = (linie || []).join('\n');
+            ta.rows = Math.max(3, (linie || []).length);
+            box.appendChild(blok);
+            return blok;
+        }
+
+        box.addEventListener('click', function(e){
+            if (!e.target.classList.contains('oe-s-usun')) return;
+            var blok = e.target.closest('.oe-sekcja');
+            var ma = blok.querySelector('.oe-s-nazwa').value.trim() !== '' || blok.querySelector('textarea').value.trim() !== '';
+            if (ma && !confirm('Usunąć tę sekcję razem z zadaniami?')) return;
+            blok.parentNode.removeChild(blok);
+        });
+
+        document.getElementById('oe-r-dodaj-sekcje').addEventListener('click', function(){
+            dodajSekcje('', 0, 0, []).querySelector('.oe-s-nazwa').focus();
+        });
+
+        document.getElementById('oe-r-wzor-wczytaj').addEventListener('click', function(){
+            var i = document.getElementById('oe-r-wzor').value;
+            if (i === '') { alert('Wybierz typ standardowy z listy.'); return; }
+            var w = wzory[i];
+            var maZadania = Array.prototype.some.call(box.querySelectorAll('textarea'), function(t){ return t.value.trim() !== ''; });
+            if (maZadania && !confirm('Zastąpić obecne sekcje i zadania zadaniami typu „' + w.nazwa + '”?')) return;
+            var tytul = document.getElementById('title');
+            if (tytul && tytul.value.trim() === '') {
+                tytul.value = w.nazwa;
+                var etykieta = document.getElementById('title-prompt-text');
+                if (etykieta) etykieta.classList.add('screen-reader-text');
+            }
+            document.getElementById('oe-r-skrot').value = w.skrot;
+            document.getElementById('oe-r-wiersze').value = w.karta_wiersze.join('\n');
+            document.querySelector('input[name="oe_rodzaj[zgoda_rodzicow]"]').checked = !!w.zgoda_rodzicow;
+            document.getElementById('oe-r-pytania').value = w.liczba_pytan;
+            box.innerHTML = '';
+            w.sekcje.forEach(function(s){ dodajSekcje(s.nazwa, s.min, s.max, s.linie); });
+        });
+    })();
+    </script>
     <?php
+}
+
+/** Task editor lines: "[zawsze] name", "[nigdy] name" or "name". */
+function oe_rodzaj_linie_zadan( $zadania ) {
+    $lines = array();
+    foreach ( $zadania as $z ) {
+        $lines[] = ( $z['zawsze_poz'] ? '[zawsze] ' : ( $z['zawsze_nie'] ? '[nigdy] ' : '' ) ) . $z['nazwa'];
+    }
+    return $lines;
+}
+
+/** One section block of the type editor. */
+function oe_rodzaj_blok_sekcji( $i, $nazwa, $min, $max, $lines ) {
+    $base = 'oe_rodzaj[sekcje][' . $i . ']';
+    ?><div class="oe-sekcja">
+        <div class="oe-sekcja-gora">
+            <label style="flex:1;min-width:220px">Nazwa sekcji<input type="text" class="oe-s-nazwa" name="<?php echo esc_attr( $base ); ?>[nazwa]" value="<?php echo esc_attr( $nazwa ); ?>" placeholder="np. manewry na silniku - zadania"></label>
+            <label>Losuj min<input type="number" min="0" class="oe-s-min" name="<?php echo esc_attr( $base ); ?>[min]" value="<?php echo (int) $min; ?>" style="width:80px"></label>
+            <label>max<input type="number" min="0" class="oe-s-max" name="<?php echo esc_attr( $base ); ?>[max]" value="<?php echo (int) $max; ?>" style="width:80px"></label>
+            <button type="button" class="button-link oe-s-usun" style="color:#b32d2e;margin-bottom:6px">Usuń sekcję</button>
+        </div>
+        <textarea name="<?php echo esc_attr( $base ); ?>[zadania]" rows="<?php echo max( 3, count( $lines ) ); ?>" placeholder="jedno zadanie w linii"><?php echo esc_textarea( implode( "\n", $lines ) ); ?></textarea>
+    </div><?php
 }
 
 add_action( 'save_post_oe_rodzaj', function( $post_id ) {

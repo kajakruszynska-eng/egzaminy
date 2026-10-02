@@ -182,6 +182,15 @@ foreach ( $seed_std['rodzaje'] as $raw ) {
 }
 t_ok( $same, 'standard types match the seed tasks and carry no organization data' );
 t_ok( oe_utworz_rodzaje_standardowe() === 0, 'standard types are created only once' );
+ob_start();
+oe_metabox_rodzaj( get_default_post_to_edit( 'oe_rodzaj', true ) );
+$html = ob_get_clean();
+preg_match( '/var wzory = (\[.*?\]);\n/', $html, $mw );
+$wz = isset( $mw[1] ) ? json_decode( $mw[1], true ) : array();
+$wz_jsm = array_values( array_filter( $wz, function( $w ) { return $w['skrot'] === 'JSM'; } ) );
+t_ok( substr_count( $html, '<option value="' ) >= 5 && strpos( $html, 'oe-r-wzor-wczytaj' ) !== false, 'new type screen offers the standard type picker' );
+t_ok( $wz_jsm && count( $wz_jsm[0]['sekcje'] ) === 3 && $wz_jsm[0]['sekcje'][0]['linie'][0] === 'człowiek za burtą', 'picker carries all sections and tasks of each standard type' );
+t_ok( strpos( $html, 'oe-r-dodaj-sekcje' ) !== false && substr_count( $html, 'class="oe-sekcja"' ) === 2, 'new type: one empty section, add-section button and a block template' );
 foreach ( get_posts( array( 'post_type' => array( 'oe_rodzaj', 'oe_egzamin' ), 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids' ) ) as $pid ) wp_delete_post( $pid, true );
 delete_option( 'oe_rodzaje_standardowe' );
 $t_one = wp_insert_post( array( 'post_type' => 'oe_rodzaj', 'post_status' => 'draft', 'post_title' => 'Własny' ) );
