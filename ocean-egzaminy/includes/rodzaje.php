@@ -58,6 +58,8 @@ function oe_rodzaj_puste() {
         'sekcje'           => array(),
         'liczba_pytan'     => 0,
         'klucz'            => '',
+        'dokumenty'           => array(), // see oe_rodzaj_normalize_dokumenty()
+        'dokumenty_dodatkowe' => array(),
     );
 }
 
@@ -130,6 +132,11 @@ function oe_rodzaj_normalize( $raw ) {
         if ( $max < $min ) $max = $min;
         $d['sekcje'][] = array( 'nazwa' => $nazwa, 'min' => $min, 'max' => $max, 'zadania' => $zadania );
     }
+
+    list( $d['dokumenty'], $d['dokumenty_dodatkowe'] ) = oe_rodzaj_normalize_dokumenty(
+        isset( $raw['dokumenty'] ) ? $raw['dokumenty'] : array(),
+        isset( $raw['dokumenty_dodatkowe'] ) ? $raw['dokumenty_dodatkowe'] : array()
+    );
     return $d;
 }
 
@@ -139,6 +146,10 @@ function oe_rodzaj_get( $id ) {
     if ( ! $id || get_post_type( $id ) !== 'oe_rodzaj' || get_post_status( $id ) === 'trash' ) return null;
     $data = get_post_meta( $id, OE_RODZAJ_META, true );
     $data = array_merge( oe_rodzaj_puste(), is_array( $data ) ? $data : array() );
+    // Types saved before document settings existed: every document built in.
+    if ( ! $data['dokumenty'] ) {
+        list( $data['dokumenty'], $data['dokumenty_dodatkowe'] ) = oe_rodzaj_normalize_dokumenty( array(), $data['dokumenty_dodatkowe'] );
+    }
     $data['id']    = $id;
     $data['nazwa'] = get_the_title( $id );
     return $data;
@@ -459,6 +470,7 @@ function oe_metabox_rodzaj( $post ) {
                 <?php endif; ?>
             </td>
         </tr>
+        <?php oe_metabox_rodzaj_dokumenty( $t ); ?>
     </table>
     </div>
     <?php

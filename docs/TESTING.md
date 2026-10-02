@@ -13,6 +13,27 @@ Run both on both PHP versions before a release:
 .tools\php85\php.exe tests\smoke.php
 ```
 
+## Built-in documents must not change by accident
+
+`tests/docs-snapshot.php` writes `word/document.xml` of all 9 built-in documents for every exam type in the seed and byte-compares two such snapshots:
+
+```
+git worktree add <tmp>\old <previous commit>
+cmd /c rmdir .tools\wordpress\wp-content\plugins\ocean-egzaminy
+New-Item -ItemType Junction -Path .tools\wordpress\wp-content\plugins\ocean-egzaminy -Target <tmp>\old\ocean-egzaminy
+.tools\php74\php.exe tests\docs-snapshot.php .tools\wordpress seed\ocean-wiedzy.json <tmp>\snap-old
+(relink the junction to .\ocean-egzaminy)
+.tools\php74\php.exe tests\docs-snapshot.php .tools\wordpress seed\ocean-wiedzy.json <tmp>\snap-new
+.tools\php74\php.exe tests\docs-snapshot.php compare <tmp>\snap-old <tmp>\snap-new
+git worktree remove --force <tmp>\old
+```
+
+Phases 3 and 4 were verified this way: 45 of 45 files identical to 1.1.0, on PHP 7.4 and 8.5.
+
+## Opening generated files in Word
+
+`OE_SMOKE_KEEP=<dir>` makes `tests/smoke.php` keep a copy of every generated file (built-in documents, filled templates, the sample template). Open them in Word to confirm Word accepts them; on 2026-10-02 all of them opened without repair prompts (checked through Word COM, read-only). Creating or saving documents through Word COM hangs on this machine, so Word-authored template fixtures could not be produced automatically; the smoke test builds Word-style XML instead (split runs, proofErr, bookmarks, hyperlinks, w14:paraId).
+
 ## Local tools (`.tools/`, git-ignored)
 
 Rebuild on a new machine (Windows, PowerShell):

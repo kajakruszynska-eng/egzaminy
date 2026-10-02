@@ -27,6 +27,7 @@ bin/
 tests/
   smoke.php                  runtime test against a local WordPress (see docs/TESTING.md)
   wp-install.php             installs that local WordPress
+  docs-snapshot.php          snapshot and byte-compare of all built-in documents (old code vs new)
 seed/
   ocean-wiedzy.json          K's settings and her five exam types, imported on the settings page (not shipped in the zip)
 .tools/                      local PHP 7.4 and 8.x, test WordPress on SQLite (git-ignored)
@@ -46,6 +47,7 @@ ocean-egzaminy/              plugin root
     assets.php               front-end CSS/JS loading
     hide-meta.php            hides theme meta on exam posts
     rodzaje.php              CPT oe_rodzaj (exam types: code, decision, venues, card rows, task sections, answer key), migration, deterministic task drawing
+    szablony.php             per-type document settings (built-in / template / off, extra template documents), DOCX template engine, sample template
     docx-builder.php         OE_Docx class, DOCX via ZipArchive
     generator.php            9 DOCX documents and the download handler
 docs/
@@ -58,7 +60,9 @@ Organization data never goes in code: read it with `oe_setting( 'key' )` or a he
 ## Domain notes
 
 - Exam types are data (Egzaminy > Typy egzaminów). K's organization uses five: Sternik Motorowodny (SM), Zeglarz Jachtowy (ZJ), Jachtowy Sternik Morski (JSM), Motorowodny Sternik Morski (MSM), Licencja do holowania narciarza wodnego lub innych obiektow (LHN), all in `seed/ocean-wiedzy.json`. Each has a ministry decision number (decyzja MSiT), its own venue lists and its own task sets.
-- Nine documents per exam: zgloszenie, karty, arkusze, arkusz_wzor1, zaswiadczenia, zal1, zal2, zal3, protokol. Generated from approved participants only.
+- Nine standard documents per exam: zgloszenie, karty, arkusze, arkusz_wzor1, zaswiadczenia, zal1, zal2, zal3, protokol. Generated from approved participants only. Each exam type sets every document to the built-in layout (generator.php, Polish standard forms), its own DOCX template, or off, and can add extra template documents (decision K, 2026-10-02: route b).
+- Template placeholders are `{name}`; the full list is `oe_szablon_znaczniki()` in `szablony.php`, shown in the type editor and in the downloadable sample template. A table row with `{u.*}` repeats per participant, with `{k.*}` per commission member; "one copy per participant" repeats the whole body. When adding a placeholder, add it to both `oe_szablon_znaczniki()` and the value functions.
+- Built-in layouts must stay byte-identical unless a change is intended: compare generated `word/document.xml` before and after (see docs/TESTING.md).
 - Task drawing is deterministic: seeded by `crc32(imie + nazwisko)`, so regenerating a document gives the same tasks for the same person. The draw depends on task order and section order of the type, so reordering tasks in a type changes the draw for everyone.
 - File names: `RRRR_MM_DD_SKROT_MIASTO_<doc>.docx`.
 - Not every venue serves every exam type (for example inland locations only serve SM, ZJ, MSM, LHN, not JSM).

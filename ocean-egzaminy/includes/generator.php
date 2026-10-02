@@ -13,21 +13,31 @@ function oe_metabox_generuj( $post ) {
         echo '<p style="font-size:12px;color:#ba7517">Opublikuj egzamin aby generować dokumenty.</p>';
         return;
     }
-    $dokumenty = array(
-        'zgloszenie'    => array('📋','Zgłoszenie egzaminu'),
-        'protokol'      => array('📄','Protokół KE'),
-        'zal1'          => array('📊','Zał. nr 1 - wyniki'),
-        'zal2'          => array('⛵','Zał. nr 2 - praktyka'),
-        'zal3'          => array('📜','Zał. nr 3 - zaświadczenia'),
-        'karty'         => array('🪪','Karty egzaminacyjne'),
-        'zaswiadczenia' => array('🏅','Zaświadczenia'),
-        'arkusze'       => array('📝','Arkusze odpowiedzi'),
-        'arkusze_wzor'  => array('📋','Arkusz odpowiedzi WZÓR 1'),
+    $ikony = array(
+        'zgloszenie'    => '📋',
+        'protokol'      => '📄',
+        'zal1'          => '📊',
+        'zal2'          => '⛵',
+        'zal3'          => '📜',
+        'karty'         => '🪪',
+        'zaswiadczenia' => '🏅',
+        'arkusze'       => '📝',
+        'arkusze_wzor'  => '📋',
     );
-    echo '<style>.oe-gb{display:flex;align-items:center;gap:8px;width:100%;margin-bottom:6px;padding:7px 10px;background:#f6f7f7;border:1px solid #ddd;border-radius:4px;font-size:13px;font-family:inherit;text-decoration:none;color:#1e1e1e}.oe-gb:hover{background:#e8f5e9;border-color:#a5d6a7;color:#1e1e1e}</style>';
-    foreach ( $dokumenty as $typ => $info ) {
-        $url = wp_nonce_url( admin_url("admin-post.php?action=oe_generuj_docx&egzamin_id={$post->ID}&typ={$typ}"), 'oe_generuj_'.$post->ID );
-        echo "<a href='".esc_url($url)."' class='oe-gb'><span style='font-size:16px'>{$info[0]}</span><span>".esc_html($info[1])."</span><span style='margin-left:auto;font-size:11px;color:#999'>↓ docx</span></a>";
+    $dokumenty = oe_egzamin_dokumenty( oe_egzamin_rodzaj( $post->ID ) );
+    echo '<style>.oe-gb{display:flex;align-items:center;gap:8px;width:100%;margin-bottom:6px;padding:7px 10px;background:#f6f7f7;border:1px solid #ddd;border-radius:4px;font-size:13px;font-family:inherit;text-decoration:none;color:#1e1e1e}.oe-gb:hover{background:#e8f5e9;border-color:#a5d6a7;color:#1e1e1e}.oe-gb-off{opacity:.6;cursor:not-allowed}</style>';
+    if ( ! $dokumenty ) {
+        echo '<p style="font-size:12px;color:#888">Wszystkie dokumenty są wyłączone w typie egzaminu.</p>';
+    }
+    foreach ( $dokumenty as $dok ) {
+        $ikona = isset( $ikony[ $dok['key'] ] ) && $dok['tryb'] === 'wbudowany' ? $ikony[ $dok['key'] ] : '🗎';
+        $opis  = $dok['tryb'] === 'szablon' ? 'szablon' : '';
+        if ( $dok['problem'] !== '' ) {
+            echo "<span class='oe-gb oe-gb-off' title='" . esc_attr( $dok['problem'] ) . "'><span style='font-size:16px'>{$ikona}</span><span>" . esc_html( $dok['label'] ) . "</span><span style='margin-left:auto;font-size:11px;color:#b32d2e'>" . esc_html( $dok['problem'] ) . "</span></span>";
+            continue;
+        }
+        $url = wp_nonce_url( admin_url( "admin-post.php?action=oe_generuj_docx&egzamin_id={$post->ID}&typ=" . rawurlencode( $dok['key'] ) ), 'oe_generuj_'.$post->ID );
+        echo "<a href='".esc_url($url)."' class='oe-gb'><span style='font-size:16px'>{$ikona}</span><span>".esc_html($dok['label'])."</span><span style='margin-left:auto;font-size:11px;color:#999'>" . esc_html( trim( $opis . ' ↓ docx' ) ) . "</span></a>";
     }
     echo '<p style="font-size:11px;color:#888;margin-top:8px">Tylko zatwierdzeni uczestnicy.</p>';
 }
@@ -64,6 +74,22 @@ function oe_handle_generuj_docx() {
         'arkusze'       => "{$prefix}_arkusze_odpowiedzi.docx",
         'arkusze_wzor'  => "{$prefix}_arkusz_wzor1.docx",
     );
+    // Which documents this exam's type offers, and how (built-in layout or template).
+    $dok = null;
+    foreach (oe_egzamin_dokumenty($eg['rodzaj']) as $d) {
+        if ($d['key'] === $typ) $dok = $d;
+    }
+    if (!$dok) wp_die('Ten dokument jest wyłączony dla tego typu egzaminu.');
+
+    if ($dok['tryb'] === 'szablon') {
+        $fn = isset($fn_map[$typ]) ? $fn_map[$typ] : $prefix . '_' . sanitize_file_name(oe_ascii(str_replace(' ', '_', $dok['label']))) . '.docx';
+        $sid = oe_szablon_poprawny_id($dok['szablon_id']);
+        if (!$sid) wp_die('Brak pliku szablonu dla dokumentu „' . esc_html($dok['label']) . '”. Wybierz plik w ustawieniach typu egzaminu.');
+        $plik = oe_szablon_wypelnij(get_attached_file($sid), $eg, $uu, $dok['na_uczestnika']);
+        if (is_wp_error($plik)) wp_die(esc_html($plik->get_error_message()));
+        oe_docx_wyslij($plik, $fn);
+    }
+
     $fn = isset($fn_map[$typ]) ? $fn_map[$typ] : "{$prefix}_{$typ}.docx";
 
     if      ($typ==='zgloszenie')    oe_doc_zgloszenie($eg,$fn);

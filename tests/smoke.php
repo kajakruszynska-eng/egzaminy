@@ -70,8 +70,86 @@ if ( $mode === 'doc' ) {
         file_put_contents( $out, $buf, FILE_APPEND );
         return '';
     } );
-    oe_handle_generuj_docx();
+    if ( $typ === '__przyklad' ) {
+        $_REQUEST['_wpnonce'] = wp_create_nonce( 'oe_szablon_przyklad' );
+        do_action( 'admin_post_oe_szablon_przyklad' );
+    } else {
+        oe_handle_generuj_docx();
+    }
     exit;
+}
+
+/** Run one document download in a child process. Returns array( docx path or '', process output ). */
+function t_generate( $typ, $eid, $out ) {
+    $env  = array_merge( getenv(), array( 'OE_WP_PATH' => $GLOBALS['wp_path'] ) );
+    $proc = proc_open( array( PHP_BINARY, __FILE__, 'doc', $typ, (string) $eid, $out ), array( 1 => array( 'pipe', 'w' ), 2 => array( 'pipe', 'w' ) ), $pipes, null, $env );
+    $stdout = stream_get_contents( $pipes[1] ) . stream_get_contents( $pipes[2] );
+    fclose( $pipes[1] );
+    fclose( $pipes[2] );
+    proc_close( $proc );
+    if ( is_file( $out . '.err' ) ) {
+        t_ok( false, "$typ: " . file_get_contents( $out . '.err' ) );
+        unlink( $out . '.err' );
+    }
+    $zip = new ZipArchive();
+    $ok  = is_file( $out ) && filesize( $out ) > 0 && $zip->open( $out ) === true;
+    if ( $ok ) {
+        $zip->close();
+        // OE_SMOKE_KEEP=<dir> keeps a copy of every generated file, e.g. to open them in Word.
+        if ( getenv( 'OE_SMOKE_KEEP' ) && is_dir( getenv( 'OE_SMOKE_KEEP' ) ) ) copy( $out, getenv( 'OE_SMOKE_KEEP' ) . '/' . basename( $out ) );
+    } elseif ( is_file( $out ) ) {
+        $stdout .= file_get_contents( $out ); // wp_die() output lands in the buffer file
+    }
+    return array( $ok ? $out : '', $stdout );
+}
+
+/** Plain text of a DOCX part: paragraphs end with "\n", w:br becomes "\n", page breaks "\f". */
+function t_docx_text( $path, $part = 'word/document.xml' ) {
+    $zip = new ZipArchive();
+    if ( $zip->open( $path ) !== true ) return '';
+    $xml = (string) $zip->getFromName( $part );
+    $zip->close();
+    $xml = preg_replace( '#<w:br w:type="page"/>#', "\f", $xml );
+    $xml = preg_replace( '#<w:br/>#', "\n", $xml );
+    $xml = preg_replace( '#</w:p>#', "\n", $xml );
+    return html_entity_decode( strip_tags( $xml ), ENT_QUOTES | ENT_XML1, 'UTF-8' );
+}
+
+/** Build a minimal DOCX in Word's style (header and footer optional). */
+function t_make_docx( $path, $body, $header = null, $footer = null ) {
+    $ns   = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"';
+    $rels = '';
+    $sect = '<w:sectPr w:rsidR="00C41B2A">';
+    $ct   = '';
+    if ( $header !== null ) {
+        $rels .= '<Relationship Id="rIdH1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>';
+        $sect .= '<w:headerReference w:type="default" r:id="rIdH1"/>';
+        $ct   .= '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>';
+    }
+    if ( $footer !== null ) {
+        $rels .= '<Relationship Id="rIdF1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>';
+        $sect .= '<w:footerReference w:type="default" r:id="rIdF1"/>';
+        $ct   .= '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>';
+    }
+    $sect .= '<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>';
+    $zip = new ZipArchive();
+    $zip->open( $path, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+    $zip->addFromString( '[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' . $ct . '</Types>' );
+    $zip->addFromString( '_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' );
+    $zip->addFromString( 'word/_rels/document.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' . $rels . '</Relationships>' );
+    $zip->addFromString( 'word/document.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ' . $ns . '><w:body>' . $body . $sect . '</w:body></w:document>' );
+    if ( $header !== null ) $zip->addFromString( 'word/header1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ' . $ns . '>' . $header . '</w:hdr>' );
+    if ( $footer !== null ) $zip->addFromString( 'word/footer1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' . $ns . '>' . $footer . '</w:ftr>' );
+    $zip->close();
+}
+
+/** Register a DOCX file as a media library attachment. */
+function t_attach_docx( $src, $name ) {
+    $up   = wp_upload_dir();
+    $dest = trailingslashit( $up['path'] ) . wp_unique_filename( $up['path'], $name );
+    copy( $src, $dest );
+    $id = wp_insert_attachment( array( 'post_mime_type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'post_title' => $name, 'post_status' => 'inherit' ), $dest );
+    return (int) $id;
 }
 
 echo 'PHP ' . PHP_VERSION . ', WordPress ' . get_bloginfo( 'version' ) . "\n";
@@ -374,12 +452,7 @@ $tmpdir = sys_get_temp_dir() . '/oe-smoke-' . getmypid();
 @mkdir( $tmpdir );
 foreach ( array( 'zgloszenie', 'protokol', 'zal1', 'zal2', 'zal3', 'karty', 'zaswiadczenia', 'arkusze', 'arkusze_wzor' ) as $typ ) {
     $out  = $tmpdir . '/' . $typ . '.docx';
-    $env  = array_merge( getenv(), array( 'OE_WP_PATH' => $wp_path ) );
-    $proc = proc_open( array( PHP_BINARY, __FILE__, 'doc', $typ, (string) $eid, $out ), array( 1 => array( 'pipe', 'w' ), 2 => array( 'pipe', 'w' ) ), $pipes, null, $env );
-    $stdout = stream_get_contents( $pipes[1] ) . stream_get_contents( $pipes[2] );
-    fclose( $pipes[1] );
-    fclose( $pipes[2] );
-    proc_close( $proc );
+    list( , $stdout ) = t_generate( $typ, $eid, $out );
 
     $xml = '';
     $zip = new ZipArchive();
@@ -390,9 +463,6 @@ foreach ( array( 'zgloszenie', 'protokol', 'zal1', 'zal2', 'zal3', 'karty', 'zas
     $dom   = new DOMDocument();
     $valid = $xml !== '' && @$dom->loadXML( $xml );
     t_ok( $valid, "$typ: valid DOCX" . ( $valid ? '' : ' (' . trim( substr( $stdout, 0, 300 ) ) . ')' ) );
-    if ( is_file( $out . '.err' ) ) {
-        t_ok( false, "$typ: " . file_get_contents( $out . '.err' ) );
-    }
     if ( $typ === 'zgloszenie' ) {
         t_ok( strpos( $xml, 'Katowice, ' ) !== false && strpos( $xml, 'ul. Przemysłowa 10/303' ) !== false, 'zgloszenie: org address and city from settings' );
     }
@@ -408,6 +478,137 @@ foreach ( array( 'zgloszenie', 'protokol', 'zal1', 'zal2', 'zal3', 'karty', 'zas
         t_ok( substr_count( $xml, '>X<' ) === 75, 'arkusze_wzor: 75 answers marked from the type key' );
     }
 }
+t_issues();
+
+// ── Templates ───────────────────────────────────────────────────────────
+echo "[templates]\n";
+// Two more approved participants, so row repetition is visible.
+$extra_z = array();
+foreach ( array( array( 'Jan', 'Kowalski' ), array( 'Zofia', 'Wiśniewska' ) ) as $p ) {
+    $id = wp_insert_post( array( 'post_type' => 'oe_zapis', 'post_status' => 'oe_zatwierdzony', 'post_title' => $p[0] . ' ' . $p[1] ) );
+    foreach ( array( '_oe_egzamin_id' => $eid, '_oe_imie' => $p[0], '_oe_nazwisko' => $p[1], '_oe_data_urodzenia' => '1999-05-06', '_oe_miejsce_urodzenia' => 'Bytom', '_oe_ulica' => 'ul. Długa 1', '_oe_kod' => '41-900', '_oe_miasto' => 'Bytom' ) as $k => $v ) update_post_meta( $id, $k, $v );
+    $extra_z[] = $id;
+}
+
+// Word-style XML: placeholders split across runs with different formatting, proofErr, bookmarks, a hyperlink.
+$tpl_listy = $tmpdir . '/tpl-listy.docx';
+t_make_docx( $tpl_listy,
+    '<w:p w:rsidR="00A1"><w:r><w:t xml:space="preserve">Egzamin </w:t></w:r><w:r w:rsidRPr="00B2"><w:rPr><w:b/></w:rPr><w:t>{nr_</w:t></w:r><w:proofErr w:type="spellStart"/><w:r><w:rPr><w:i/></w:rPr><w:t>egza</w:t></w:r><w:bookmarkStart w:id="0" w:name="x"/><w:r><w:t>minu}</w:t></w:r><w:bookmarkEnd w:id="0"/><w:proofErr w:type="spellEnd"/><w:r><w:t xml:space="preserve"> z dnia {data}, typ {rodzaj}.</w:t></w:r></w:p>'
+    . '<w:p><w:hyperlink w:anchor="x"><w:r><w:t>{org_</w:t></w:r></w:hyperlink><w:r><w:t>nazwa_biernik} / {zly_znacznik} / {u.imie}</w:t></w:r></w:p>'
+    . '<w:p><w:r><w:t>{komisja}</w:t></w:r></w:p>'
+    . '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="1000"/><w:gridCol w:w="3000"/><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>Lp.</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Osoba</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Zadania</w:t></w:r></w:p></w:tc></w:tr>'
+    . '<w:tr><w:tc><w:p><w:r><w:t>{u.lp</w:t></w:r><w:r><w:t>}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>{u.imie_nazwisko}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>{u.zadania}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+    . '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>{k.rola}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>{k.imie}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>',
+    '<w:p><w:r><w:t xml:space="preserve">Nagłówek: {org_nazwa}</w:t></w:r></w:p>',
+    '<w:p><w:r><w:t>Stopka {nr_</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>egzaminu}</w:t></w:r></w:p>'
+);
+$tpl_osoba = $tmpdir . '/tpl-osoba.docx';
+t_make_docx( $tpl_osoba,
+    '<w:p w14:paraId="1A2B3C4D" w14:textId="77777777"><w:bookmarkStart w:id="0" w:name="_GoBack"/><w:r><w:t>{org_nazwa}</w:t></w:r><w:bookmarkEnd w:id="0"/></w:p>'
+    . '<w:p><w:r><w:rPr><w:sz w:val="40"/></w:rPr><w:t xml:space="preserve">Zaświadczenie nr {u.nr_zaswiadczenia}</w:t></w:r></w:p>'
+    . '<w:p><w:r><w:t xml:space="preserve">Zaświadcza się, że </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>{u.imie</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>_nazwisko}</w:t></w:r><w:r><w:t xml:space="preserve">, ur. {u.data_ur} w {u.miejsce_ur}.</w:t></w:r></w:p>'
+);
+if ( getenv( 'OE_SMOKE_KEEP' ) && is_dir( getenv( 'OE_SMOKE_KEEP' ) ) ) {
+    copy( $tpl_listy, getenv( 'OE_SMOKE_KEEP' ) . '/tpl-listy.docx' );
+    copy( $tpl_osoba, getenv( 'OE_SMOKE_KEEP' ) . '/tpl-osoba.docx' );
+}
+$att_listy = t_attach_docx( $tpl_listy, 'tpl-listy.docx' );
+$att_osoba = t_attach_docx( $tpl_osoba, 'tpl-osoba.docx' );
+
+// Type configuration: zal1 from a template, protokol template without a file, zal3 off, one extra per-participant document.
+$smd = get_post_meta( $sm['id'], OE_RODZAJ_META, true );
+$smd['dokumenty'] = array(
+    'zal1'     => array( 'tryb' => 'szablon', 'szablon_id' => $att_listy, 'na_uczestnika' => false ),
+    'protokol' => array( 'tryb' => 'szablon', 'szablon_id' => 0 ),
+    'zal3'     => array( 'tryb' => 'wylaczony' ),
+);
+$smd['dokumenty_dodatkowe'] = array( array( 'nazwa' => 'Zaświadczenie własne', 'szablon_id' => $att_osoba, 'na_uczestnika' => true ), array( 'nazwa' => 'Bez pliku', 'szablon_id' => 999999 ) );
+update_post_meta( $sm['id'], OE_RODZAJ_META, wp_slash( oe_rodzaj_normalize( $smd ) ) );
+$smt = oe_rodzaj_get( $sm['id'] );
+t_ok( $smt['dokumenty']['zal1']['szablon_id'] === $att_listy && $smt['dokumenty']['zgloszenie']['tryb'] === 'wbudowany', 'document settings saved, unspecified documents stay built in' );
+t_ok( count( $smt['dokumenty_dodatkowe'] ) === 2 && $smt['dokumenty_dodatkowe'][1]['szablon_id'] === 0, 'invalid template ID is dropped' );
+
+$lista = oe_egzamin_dokumenty( $smt );
+$keys  = array_map( function( $d ) { return $d['key']; }, $lista );
+t_ok( ! in_array( 'zal3', $keys, true ) && in_array( 'dodatkowy_0', $keys, true ), 'switched-off document hidden, extra document listed' );
+ob_start();
+oe_metabox_generuj( get_post( $eid ) );
+$html = ob_get_clean();
+t_ok( strpos( $html, 'Zaświadczenie własne' ) !== false && substr_count( $html, 'oe-gb oe-gb-off' ) === 2 && strpos( $html, 'typ=zal3' ) === false, 'generate box: extra document, missing files flagged, zal3 gone' );
+ob_start();
+oe_metabox_rodzaj( get_post( $sm['id'] ) );
+$html = ob_get_clean();
+t_ok( strpos( $html, 'tpl-listy' ) !== false && strpos( $html, '{u.imie_nazwisko}' ) !== false && strpos( $html, 'oe_szablon_przyklad' ) !== false, 'type editor shows templates, placeholder list and sample link' );
+
+// Lists template.
+list( $f, $o ) = t_generate( 'zal1', $eid, $tmpdir . '/out-zal1.docx' );
+t_ok( $f !== '', 'zal1 from template downloads' . ( $f ? '' : ': ' . substr( trim( strip_tags( $o ) ), 0, 200 ) ) );
+if ( $f ) {
+    $txt = t_docx_text( $f );
+    t_ok( strpos( $txt, 'Egzamin SM/001/T/2026 z dnia 15.11.2026 r., typ Sternik Motorowodny.' ) !== false, 'placeholder split across runs, proofErr and bookmark is filled' );
+    t_ok( strpos( $txt, 'Fundację propagowania sportów wodnych dla każdego OCEAN WIEDZY / {zly_znacznik} / {u.imie}' ) !== false, 'hyperlink-split placeholder filled; unknown and out-of-row {u.} kept' );
+    t_ok( strpos( $txt, "Jan Test - przewodniczący\nAnna Test - sekretarz" ) !== false, 'multi-line value becomes line breaks' );
+    t_ok( preg_match( '/1\.\s*Ewa Próbna.*2\.\s*Jan Kowalski.*3\.\s*Zofia Wiśniewska/s', $txt ) === 1, 'participant row repeated for 3 people in order' );
+    t_ok( preg_match( '/przewodniczący\s*Jan Test\s*sekretarz\s*Anna Test/', $txt ) === 1, 'commission row repeated' );
+    t_ok( strpos( $txt, 'kierowanie załogą' ) !== false, 'participant tasks filled' );
+    t_ok( strpos( t_docx_text( $f, 'word/header1.xml' ), 'Nagłówek: Fundacja propagowania' ) !== false && strpos( t_docx_text( $f, 'word/footer1.xml' ), 'Stopka SM/001/T/2026' ) !== false, 'header and footer filled' );
+    $zip = new ZipArchive();
+    $zip->open( $f );
+    $dom = new DOMDocument();
+    t_ok( @$dom->loadXML( $zip->getFromName( 'word/document.xml' ) ) && $zip->getFromName( '[Content_Types].xml' ) !== false, 'filled template is valid XML with all package parts' );
+    $zip->close();
+    // Same tasks as zal2's draw for this person.
+    $u0  = oe_get_uu( $eid )[0];
+    $exp = oe_szablon_wartosci_uczestnika( $u0, 0, oe_get_eg( $eid ) );
+    t_ok( strpos( $txt, $exp['u.zadania'] ) !== false && $exp['u.zadania'] !== '', 'tasks match the deterministic draw' );
+}
+
+// Per-participant template.
+list( $f, $o ) = t_generate( 'dodatkowy_0', $eid, $tmpdir . '/out-osoba.docx' );
+t_ok( $f !== '', 'extra per-participant document downloads' . ( $f ? '' : ': ' . substr( trim( strip_tags( $o ) ), 0, 200 ) ) );
+if ( $f ) {
+    $txt = t_docx_text( $f );
+    t_ok( substr_count( $txt, "\f" ) === 2 && substr_count( $txt, 'Fundacja propagowania' ) === 3, 'one copy per participant, separated by page breaks' );
+    t_ok( strpos( $txt, 'Zaświadczenie nr 002/SM/001/T/2026' ) !== false && strpos( $txt, 'Zaświadcza się, że Jan Kowalski, ur. 06.05.1999 r. w Bytom.' ) !== false, 'participant values in each copy' );
+    $zip = new ZipArchive();
+    $zip->open( $f );
+    $xml = $zip->getFromName( 'word/document.xml' );
+    $zip->close();
+    t_ok( substr_count( $xml, '<w:sectPr' ) === 1 && preg_match( '#<w:sectPr.*</w:sectPr></w:body>#s', $xml ) === 1, 'section properties kept once, at the end of the body' );
+    t_ok( substr_count( $xml, 'w:bookmarkStart' ) === 1 && substr_count( $xml, '1A2B3C4D' ) === 1, 'copies drop duplicate bookmarks and paragraph IDs' );
+}
+
+// Error paths.
+list( $f, $o ) = t_generate( 'protokol', $eid, $tmpdir . '/out-brak.docx' );
+t_ok( $f === '' && strpos( $o, 'Brak pliku szablonu' ) !== false, 'template without a file: clear error' );
+list( $f, $o ) = t_generate( 'zal3', $eid, $tmpdir . '/out-off.docx' );
+t_ok( $f === '' && strpos( $o, 'wyłączony' ) !== false, 'switched-off document: clear error' );
+
+// The sample template downloads, and works as a template itself.
+list( $f, $o ) = t_generate( '__przyklad', $eid, $tmpdir . '/przyklad.docx' );
+t_ok( $f !== '', 'sample template downloads' );
+if ( $f ) {
+    $att = t_attach_docx( $f, 'przyklad.docx' );
+    $smd = get_post_meta( $sm['id'], OE_RODZAJ_META, true );
+    $smd['dokumenty']['zal2'] = array( 'tryb' => 'szablon', 'szablon_id' => $att, 'na_uczestnika' => false );
+    update_post_meta( $sm['id'], OE_RODZAJ_META, wp_slash( oe_rodzaj_normalize( $smd ) ) );
+    list( $g, $o ) = t_generate( 'zal2', $eid, $tmpdir . '/przyklad-wyp.docx' );
+    $txt = $g ? t_docx_text( $g ) : '';
+    t_ok( $g !== '' && strpos( $txt, 'Uczestnicy (3)' ) !== false && strpos( $txt, 'Zofia Wiśniewska' ) !== false && strpos( $txt, 'PRZYKŁADOWY SZABLON - STERNIK MOTOROWODNY' ) !== false, 'sample template fills correctly' );
+    t_ok( strpos( $txt, 'u.imie_nazwisko' ) !== false, 'placeholder reference page is left readable' );
+    wp_delete_attachment( $att, true );
+}
+
+// Restore SM documents to built-in.
+$smd = get_post_meta( $sm['id'], OE_RODZAJ_META, true );
+$smd['dokumenty'] = array();
+$smd['dokumenty_dodatkowe'] = array();
+update_post_meta( $sm['id'], OE_RODZAJ_META, wp_slash( oe_rodzaj_normalize( $smd ) ) );
+wp_delete_attachment( $att_listy, true );
+wp_delete_attachment( $att_osoba, true );
+foreach ( $extra_z as $id ) wp_delete_post( $id, true );
+t_issues();
+
 array_map( 'unlink', glob( $tmpdir . '/*' ) ?: array() );
 @rmdir( $tmpdir );
 
