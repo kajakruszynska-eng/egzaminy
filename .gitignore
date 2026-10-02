@@ -1,0 +1,6 @@
+# Local PHP binaries used by bin/check.sh
+.tools/
+
+# Build output
+dist/
+*.zip
