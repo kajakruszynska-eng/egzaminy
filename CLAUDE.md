@@ -6,7 +6,7 @@ Guidance for Claude Code when working in this repository.
 
 `ocean-egzaminy` is a WordPress plugin that manages Polish sailing and motorboat license exams (patenty zeglarskie) for an examining organization: it publishes exam dates, takes participant signups through a public form, lets staff approve participants, sends confirmation emails with payment details, and generates the official exam paperwork as DOCX files (pure PHP, no external office tools).
 
-It was built for one organization (Fundacja Ocean Wiedzy, Katowice) and currently has that organization's data hardcoded in many places. The goal now is a lean, universal version that other organizations can install with their own data. See `docs/UNIVERSALIZATION.md` for the plan and the list of hardcoded spots.
+It was built for one organization (Fundacja Ocean Wiedzy, Katowice). The goal is a lean, universal version that other organizations can install with their own data. Organization data (settings) and exam types are no longer hardcoded; the remaining Polish legal wording in documents is Phase 4. See `docs/UNIVERSALIZATION.md` for the plan and status.
 
 Owner: K, freelance developer. She communicates in Polish, so talk to her in Polish. Code, comments and docs are in English except user-facing plugin strings, which stay Polish.
 
@@ -28,7 +28,7 @@ tests/
   smoke.php                  runtime test against a local WordPress (see docs/TESTING.md)
   wp-install.php             installs that local WordPress
 seed/
-  ocean-wiedzy.json          K's organization settings, imported on the settings page (not shipped in the zip)
+  ocean-wiedzy.json          K's settings and her five exam types, imported on the settings page (not shipped in the zip)
 .tools/                      local PHP 7.4 and 8.x, test WordPress on SQLite (git-ignored)
 dist/                        built zips (git-ignored)
 ocean-egzaminy/              plugin root
@@ -45,8 +45,7 @@ ocean-egzaminy/              plugin root
     export.php               CSV export of participants
     assets.php               front-end CSS/JS loading
     hide-meta.php            hides theme meta on exam posts
-    miejsca-egzaminow.php    exam venues per exam type (teoria, praktyka)
-    zadania-egzaminow.php    exam task definitions and deterministic drawing
+    rodzaje.php              CPT oe_rodzaj (exam types: code, decision, venues, card rows, task sections, answer key), migration, deterministic task drawing
     docx-builder.php         OE_Docx class, DOCX via ZipArchive
     generator.php            9 DOCX documents and the download handler
 docs/
@@ -54,13 +53,13 @@ docs/
   TESTING.md                 how to run and rebuild the test setup
 ```
 
-Organization data never goes in code: read it with `oe_setting( 'key' )` or a helper from `settings.php` (`oe_org_nazwa_pelna()`, `oe_org_adres()`, `oe_org_rejestry()`, `oe_dok_miasto_data()`, ...). Access checks use `oe_manage_exams` or `oe_generate_documents`, never `edit_posts`.
+Organization data never goes in code: read it with `oe_setting( 'key' )` or a helper from `settings.php` (`oe_org_nazwa_pelna()`, `oe_org_adres()`, `oe_org_rejestry()`, `oe_dok_miasto_data()`, ...). Exam type data never goes in code either: get it with `oe_egzamin_rodzaj( $exam_id )` or `oe_rodzaj_get( $type_id )`. Access checks use `oe_manage_exams` or `oe_generate_documents`, never `edit_posts`; exam types and settings need `manage_options`.
 
 ## Domain notes
 
-- Five exam types: Sternik Motorowodny (SM), Zeglarz Jachtowy (ZJ), Jachtowy Sternik Morski (JSM), Motorowodny Sternik Morski (MSM), Licencja do holowania narciarza wodnego lub innych obiektow (LHN). Each has a ministry decision number (decyzja MSiT), its own venue lists and its own task sets.
+- Exam types are data (Egzaminy > Typy egzaminów). K's organization uses five: Sternik Motorowodny (SM), Zeglarz Jachtowy (ZJ), Jachtowy Sternik Morski (JSM), Motorowodny Sternik Morski (MSM), Licencja do holowania narciarza wodnego lub innych obiektow (LHN), all in `seed/ocean-wiedzy.json`. Each has a ministry decision number (decyzja MSiT), its own venue lists and its own task sets.
 - Nine documents per exam: zgloszenie, karty, arkusze, arkusz_wzor1, zaswiadczenia, zal1, zal2, zal3, protokol. Generated from approved participants only.
-- Task drawing is deterministic: seeded by `crc32(imie + nazwisko)`, so regenerating a document gives the same tasks for the same person.
+- Task drawing is deterministic: seeded by `crc32(imie + nazwisko)`, so regenerating a document gives the same tasks for the same person. The draw depends on task order and section order of the type, so reordering tasks in a type changes the draw for everyone.
 - File names: `RRRR_MM_DD_SKROT_MIASTO_<doc>.docx`.
 - Not every venue serves every exam type (for example inland locations only serve SM, ZJ, MSM, LHN, not JSM).
 
@@ -75,5 +74,7 @@ Organization data never goes in code: read it with `oe_setting( 'key' )` or a he
 ## Known quirks
 
 - Exam metadata lives in post meta with the `_oe_` prefix (for example `_oe_nr_egzaminu`, `_oe_rodzaj_egzaminu`, `_oe_komisja`). Do not rename keys without a migration.
-- Exam type names are used as array keys and compared as exact strings in at least five files. Changing a label breaks lookups.
+- Exams store the type ID in `_oe_rodzaj_id` and a copy of the type name in `_oe_rodzaj_egzaminu` (kept in sync on rename; list columns, emails and `[lista_egzaminow rodzaj=""]` read the name). Exams without an ID are linked by name (`oe_migruj_rodzaje_egzaminow()`), and `oe_egzamin_rodzaj()` falls back to the name.
+- Split multi-line text with `/\r\n|\r|\n/`, never `/\R/` without the `u` flag: `\R` matches byte 0x85, which is part of UTF-8 letters such as "ą". `bin/check.php` flags it.
+- `update_post_meta()` unslashes its value, so wrap already clean arrays or strings in `wp_slash()`.
 - The site also runs other plugins and the Astra theme, so keep front-end CSS scoped under an `oe-` prefix.

@@ -1,29 +1,9 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-/**
- * Ministry decision number per exam type. Single source for the metabox,
- * the save handler and the emails (replaced by exam type data in Phase 3).
- */
-function oe_get_decyzje() {
-    return [
-        'Sternik Motorowodny'                                         => 'DSW-ZKS.442.41.2022',
-        'Żeglarz Jachtowy'                                            => 'DSW-ZKS.442.39.2022',
-        'Jachtowy Sternik Morski'                                     => 'DSW-ZKS.442.40.2022',
-        'Motorowodny Sternik Morski'                                  => 'DSW-ZKS.442.42.2022',
-        'Licencja do holowania narciarza wodnego lub innych obiektów' => 'DSW-ZKS.442.43.2022',
-    ];
-}
-
-function oe_get_nr_decyzji_auto( $rodzaj ) {
-    $mapa = oe_get_decyzje();
-    if ( isset( $mapa[ $rodzaj ] ) ) return $mapa[ $rodzaj ];
-    if ( $rodzaj === '' || $rodzaj === null ) return '';
-    // Tolerate older or shortened labels stored in meta.
-    foreach ( $mapa as $klucz => $nr ) {
-        if ( stripos( $rodzaj, $klucz ) !== false || stripos( $klucz, $rodzaj ) !== false ) return $nr;
-    }
-    return '';
+/** Exam venue for emails: the full venue if set, otherwise the theory venue. */
+function oe_email_miejsce( $egzamin_id ) {
+    return get_post_meta( $egzamin_id, '_oe_miejsce_pelne', true ) ?: get_post_meta( $egzamin_id, '_oe_miejsce_teoria', true );
 }
 
 function oe_wyslij_email_potwierdzenie( $zapis_id ) {
@@ -39,11 +19,12 @@ function oe_wyslij_email_potwierdzenie( $zapis_id ) {
     $rodzaj      = get_post_meta($egzamin_id, '_oe_rodzaj_egzaminu',  true);
     $data_egz    = get_post_meta($egzamin_id, '_oe_data_egzaminu',    true);
     $godzina     = get_post_meta($egzamin_id, '_oe_godzina',          true);
-    $miejsce     = get_post_meta($egzamin_id, '_oe_miejsce_pelne',    true);
+    $miejsce     = oe_email_miejsce($egzamin_id);
     $kwota_raw   = floatval( get_post_meta($egzamin_id, '_oe_kwota_oplaty', true) );
     $konto       = get_post_meta($egzamin_id, '_oe_nr_konta',         true) ?: oe_setting('bank_konto');
     $wlasciciel  = get_post_meta($egzamin_id, '_oe_wlasciciel_konta', true) ?: oe_bank_wlasciciel();
-    $nr_decyzji  = get_post_meta($egzamin_id, '_oe_nr_decyzji',       true) ?: oe_get_nr_decyzji_auto($rodzaj);
+    $typ         = oe_egzamin_rodzaj($egzamin_id);
+    $nr_decyzji  = get_post_meta($egzamin_id, '_oe_nr_decyzji',       true) ?: ($typ ? $typ['nr_decyzji'] : '');
 
     $data_fmt    = $data_egz ? date_i18n('d.m.Y', strtotime($data_egz)) : '';
     $kwota       = $znizka ? $kwota_raw / 2 : $kwota_raw;
@@ -198,7 +179,7 @@ function oe_wyslij_email_zmiana_statusu( $zapis_id, $nowy_status ) {
     $rodzaj     = get_post_meta($egzamin_id, '_oe_rodzaj_egzaminu', true);
     $data_egz   = get_post_meta($egzamin_id, '_oe_data_egzaminu',   true);
     $godzina    = get_post_meta($egzamin_id, '_oe_godzina',         true);
-    $miejsce    = get_post_meta($egzamin_id, '_oe_miejsce_pelne',   true);
+    $miejsce    = oe_email_miejsce($egzamin_id);
     $data_fmt   = $data_egz ? date_i18n('d.m.Y', strtotime($data_egz)) : '';
 
     if ( $nowy_status === 'oe_zatwierdzony' ) {

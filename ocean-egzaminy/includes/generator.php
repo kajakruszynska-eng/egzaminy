@@ -46,15 +46,8 @@ function oe_handle_generuj_docx() {
     $eg = oe_get_eg($eid);
     $uu = oe_get_uu($eid);
 
-    // Format nazwy pliku: RRRR_MM_DD_SM_MIASTO
-    $skroty = array(
-        'Sternik Motorowodny'                                         => 'SM',
-        'Żeglarz Jachtowy'                                            => 'ZJ',
-        'Jachtowy Sternik Morski'                                     => 'JSM',
-        'Motorowodny Sternik Morski'                                  => 'MSM',
-        'Licencja do holowania narciarza wodnego lub innych obiektów' => 'LHN',
-    );
-    $skrot  = isset($skroty[$eg['rodzaj_egzaminu']]) ? $skroty[$eg['rodzaj_egzaminu']] : 'EGZ';
+    // Format nazwy pliku: RRRR_MM_DD_SKROT_MIASTO
+    $skrot  = ($eg['rodzaj'] && $eg['rodzaj']['skrot'] !== '') ? $eg['rodzaj']['skrot'] : 'EGZ';
     $miasto = oe_ascii(oe_upper(preg_replace('/[^a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/', '', $eg['miejscowosc'])));
     $data_p = $eg['data_egzaminu'] ? date('Y_m_d', strtotime($eg['data_egzaminu'].'T00:00:00')) : date('Y_m_d');
     $prefix = "{$data_p}_{$skrot}_{$miasto}";
@@ -91,10 +84,12 @@ function oe_get_eg($id) {
     $kom = get_post_meta($id,'_oe_komisja',true);
     $d   = get_post_meta($id,'_oe_data_egzaminu',true);
     $p   = get_post($id);
+    $typ = oe_egzamin_rodzaj($id);
     return array(
         'nr_egzaminu'        => get_post_meta($id,'_oe_nr_egzaminu',true),
-        'nr_decyzji'         => get_post_meta($id,'_oe_nr_decyzji',true),
-        'rodzaj_egzaminu'    => get_post_meta($id,'_oe_rodzaj_egzaminu',true),
+        'nr_decyzji'         => get_post_meta($id,'_oe_nr_decyzji',true) ?: ($typ ? $typ['nr_decyzji'] : ''),
+        'rodzaj'             => $typ,
+        'rodzaj_egzaminu'    => $typ ? $typ['nazwa'] : get_post_meta($id,'_oe_rodzaj_egzaminu',true),
         'data_egzaminu'      => $d,
         'data_fmt'           => oe_dfmt($d),
         'data_sl'            => oe_dsl($d),
@@ -295,7 +290,7 @@ function oe_doc_protokol($eg,$uu,$fn) {
         array('text'=>'W dniu '.$eg['data_sl'].', o godz. '.$eg['godzina'].', w siedzibie '),
         array('text'=>($eg['miejsce_teoria'] ?: ($eg['miejsce_pelne'] ?? '')),'bold'=>true),
         array('text'=>($eg['miejsce_praktyka'] ?: ($eg['miejsce_praktyczne'] ?? '')) ? ' oraz w '.($eg['miejsce_praktyka'] ?: ($eg['miejsce_praktyczne'] ?? '')) : ''),
-        array('text'=>', Komisja Egzaminacyjna powołana przez Fundację propagowania sportów wodnych dla każdego OCEAN WIEDZY w składzie:'),
+        array('text'=>', Komisja Egzaminacyjna powołana przez '.oe_org_nazwa_biernik().' w składzie:'),
     ),array('after'=>160));
 
     $cw=array(3000,4000,3466);
@@ -385,23 +380,14 @@ function oe_doc_zal1($eg,$uu,$fn) {
 function oe_doc_zal2($eg, $uu, $fn) {
     $d = new OE_Docx();
 
-    $wszystkie   = function_exists('oe_get_zadania') ? oe_get_zadania() : array();
-    $def         = isset($wszystkie[$eg['rodzaj_egzaminu']]) ? $wszystkie[$eg['rodzaj_egzaminu']] : array();
-    $zadania     = isset($def['zadania']) ? $def['zadania'] : array();
+    $def         = oe_rodzaj_def_losowania($eg['rodzaj']);
+    $zadania     = $def['zadania'];
 
     if (empty($zadania)) {
         $d->p('Brak definicji zadań dla tego rodzaju egzaminu.');
         $d->download($fn);
         return;
     }
-
-    $sekcje_nazwy = array(
-        'zagle'      => 'manewry na żaglach - zadania',
-        'silnik'     => 'manewry na silniku - zadania',
-        'kierowanie' => 'kierowanie załogą',
-        'inne'       => 'inne',
-        'praktyka'   => 'praktyka',
-    );
 
     // Szerokości: kolumna nazwiska + jedna kolumna per zadanie
     $nz  = count($zadania);
@@ -420,8 +406,7 @@ function oe_doc_zal2($eg, $uu, $fn) {
     foreach ($zadania as $idx => $z) {
         if ($z['sekcja'] !== $sekcja_akt) {
             $sekcja_akt = $z['sekcja'];
-            $snazwa = isset($sekcje_nazwy[$z['sekcja']]) ? $sekcje_nazwy[$z['sekcja']] : $z['sekcja'];
-            $legenda[] = array('tekst'=>$snazwa, 'bold'=>true);
+            $legenda[] = array('tekst'=>$z['sekcja'], 'bold'=>true);
         }
         $legenda[] = array('tekst'=>'  '.($idx+1).'. '.$z['nazwa'], 'bold'=>false);
     }
@@ -454,8 +439,7 @@ function oe_doc_zal2($eg, $uu, $fn) {
 
     $row_sekcje = array(OE_Docx::tc('', $w0));
     foreach ($sekcje_info as $s) {
-        $snazwa = isset($sekcje_nazwy[$s['sekcja']]) ? $sekcje_nazwy[$s['sekcja']] : $s['sekcja'];
-        $row_sekcje[] = OE_Docx::tc($snazwa, $wz*$s['count'], array(
+        $row_sekcje[] = OE_Docx::tc($s['sekcja'], $wz*$s['count'], array(
             'colSpan'  => $s['count'],
             'textOpts' => array('bold'=>true,'size'=>13,'align'=>'center'),
         ));
@@ -526,72 +510,21 @@ function oe_doc_karty($eg, $uu, $fn) {
     // Kolumny: zadanie | Ocena | Podpis
     $cw  = array(7000, 1800, 1666);
 
-    $wszystkie = function_exists('oe_get_zadania') ? oe_get_zadania() : array();
-    $def       = isset($wszystkie[$eg['rodzaj_egzaminu']]) ? $wszystkie[$eg['rodzaj_egzaminu']] : array();
-    $zadania   = isset($def['zadania']) ? $def['zadania'] : array();
+    $typ     = $eg['rodzaj'];
+    $def     = oe_rodzaj_def_losowania($typ);
+    $zadania = $def['zadania'];
 
-    $sekcje_nazwy = array(
-        'zagle'      => 'manewry na żaglach - zadania',
-        'silnik'     => 'manewry na silniku - zadania',
-        'kierowanie' => 'kierowanie załogą',
-        'inne'       => 'inne',
-        'praktyka'   => 'praktyka',
-    );
-
-    // Definicje tabel per typ egzaminu
-    // Tabela 1: zawsze test z teorii + nagłówki
-    // Pozostałe tabele: sekcje zadań praktycznych
-    $tabele_def = array(
-        'Żeglarz Jachtowy' => array(
-            array('naglowek'=>'zadanie egzaminacyjne:', 'wiersze'=>array(
-                array('nazwa'=>'test/y z teorii', 'wynik'=>'TEORIA'),
-                array('nazwa'=>'praktyka',         'wynik'=>'PRAKTYKA'),
-            )),
-            array('naglowek'=>'manewry na żaglach - zadania', 'sekcja'=>'zagle'),
-            array('naglowek'=>'manewry na silniku - zadania', 'sekcja'=>'silnik'),
-            array('naglowek'=>'kierowanie załogą',             'sekcja'=>'kierowanie'),
-            array('naglowek'=>'inne',                          'sekcja'=>'inne'),
-        ),
-        'Jachtowy Sternik Morski' => array(
-            array('naglowek'=>'zadanie egzaminacyjne:', 'wiersze'=>array(
-                array('nazwa'=>'test/y z teorii',    'wynik'=>'TEORIA'),
-                array('nazwa'=>'zadanie nawigacyjne','wynik'=>''),
-                array('nazwa'=>'praktyka',            'wynik'=>'PRAKTYKA'),
-            )),
-            array('naglowek'=>'manewry na żaglach - zadania', 'sekcja'=>'zagle'),
-            array('naglowek'=>'manewry na silniku - zadania', 'sekcja'=>'silnik'),
-            array('naglowek'=>'kierowanie załogą',             'sekcja'=>'kierowanie'),
-        ),
-        'Sternik Motorowodny' => array(
-            array('naglowek'=>'zadanie egzaminacyjne:', 'wiersze'=>array(
-                array('nazwa'=>'test z teorii', 'wynik'=>'TEORIA'),
-                array('nazwa'=>'praktyka',       'wynik'=>'PRAKTYKA'),
-            )),
-            array('naglowek'=>'manewry na silniku - zadania', 'sekcja'=>'silnik'),
-        ),
-        'Motorowodny Sternik Morski' => array(
-            array('naglowek'=>'zadanie egzaminacyjne:', 'wiersze'=>array(
-                array('nazwa'=>'test z teorii', 'wynik'=>'TEORIA'),
-                array('nazwa'=>'praktyka',       'wynik'=>'PRAKTYKA'),
-            )),
-            array('naglowek'=>'praktyka', 'sekcja'=>'praktyka'),
-        ),
-        'Licencja do holowania narciarza wodnego lub innych obiektów' => array(
-            array('naglowek'=>'zadanie egzaminacyjne:', 'wiersze'=>array(
-                array('nazwa'=>'test z teorii', 'wynik'=>'TEORIA'),
-                array('nazwa'=>'praktyka',       'wynik'=>'PRAKTYKA'),
-            )),
-            array('naglowek'=>'praktyka', 'sekcja'=>'praktyka'),
-        ),
-    );
-
-    $rodzaj = isset($eg['rodzaj_egzaminu']) ? $eg['rodzaj_egzaminu'] : '';
-    $tabele = isset($tabele_def[$rodzaj]) ? $tabele_def[$rodzaj] : array(
-        array('naglowek'=>'zadanie egzaminacyjne:', 'wiersze'=>array(
-            array('nazwa'=>'test z teorii','wynik'=>'TEORIA'),
-            array('nazwa'=>'praktyka',     'wynik'=>'PRAKTYKA'),
-        )),
-    );
+    // Tabela 1: stałe wiersze (np. test z teorii, praktyka); kolejne: sekcje zadań praktycznych
+    $wiersze = ($typ && $typ['karta_wiersze']) ? $typ['karta_wiersze'] : array('test z teorii', 'praktyka');
+    $tabele  = array(array('naglowek'=>'zadanie egzaminacyjne:', 'wiersze'=>array()));
+    foreach ($wiersze as $w) {
+        $tabele[0]['wiersze'][] = array('nazwa'=>$w);
+    }
+    if ($typ) {
+        foreach ($typ['sekcje'] as $s) {
+            $tabele[] = array('naglowek'=>$s['nazwa'], 'sekcja'=>$s['nazwa']);
+        }
+    }
 
     foreach ($uu as $idx => $u) {
         if ($idx > 0) $d->pageBreak();
@@ -610,7 +543,7 @@ function oe_doc_karty($eg, $uu, $fn) {
         $d->p('– administratorami zbiorów powyższych danych są: '.oe_org_nazwa_pelna().' oraz Ministerstwo Sportu i Turystyki.',array('italic'=>true,'size'=>16,'after'=>60));
         $d->p('– powyższe dane osobowe są zbierane w celach dowodowych zgodnie z § 19 ust. 2 Rozporządzenie Ministra Sportu i Turystyki z 9 kwietnia 2013 r. w sprawie uprawiania turystyki wodnej (Dz. U. 2013 poz. 460) i nie będą udostępniane do innych celów.',array('italic'=>true,'size'=>16,'after'=>80));
         $d->p('Wyrażam zgodę na przetwarzanie moich danych osobowych dla potrzeb niezbędnych do przeprowadzenia egzaminu na patenty żeglarskie, motorowodne i licencje, zgodnie z Rozporządzeniem Parlamentu Europejskiego i Rady (UE) 2016/679 z dnia 27 kwietnia 2016 r.',array('size'=>16,'after'=>80));
-        if (in_array($rodzaj, array('Żeglarz Jachtowy','Sternik Motorowodny'))) {
+        if ($typ && $typ['zgoda_rodzicow']) {
             $d->pRuns(array(
                 array('text'=>'Dołączono zgodę rodziców/opiekunów prawnych na uprawianie turystyki wodnej '),
                 array('text'=>'[TAK]','bold'=>true),array('text'=>'  '),
@@ -709,8 +642,7 @@ function oe_doc_zaswiadczenia($eg,$uu,$fn) {
 
 function oe_arkusz_buduj(OE_Docx $d, $eg, $u_imie, $u_nazwisko, $klucz_odpowiedzi) {
     $rodzaj  = isset($eg['rodzaj_egzaminu']) ? $eg['rodzaj_egzaminu'] : '';
-    $is_hol  = ($rodzaj === 'Licencja do holowania narciarza wodnego lub innych obiektów');
-    $n_pytan = $is_hol ? 25 : 75;
+    $n_pytan = ($eg['rodzaj'] && $eg['rodzaj']['liczba_pytan']) ? (int)$eg['rodzaj']['liczba_pytan'] : 75;
 
     // ── Tytuł ──
     $d->pRuns(array(array('text'=>oe_upper($rodzaj),'bold'=>true,'size'=>22)),array('align'=>'center','after'=>40));
@@ -728,50 +660,36 @@ function oe_arkusz_buduj(OE_Docx $d, $eg, $u_imie, $u_nazwisko, $klucz_odpowiedz
     $d->br();
 
     // ── Tabela pytań ──
-    if ($is_hol) {
-        // HOL: 25 pytań, 1 grupa
-        $wN=560; $wA=3315; $wAL=3316;
-        $cw=array($wN,$wA,$wA,$wAL);
-        $hdr=array(
-            OE_Docx::tc('Nr pytania',$wN,array('textOpts'=>array('bold'=>true,'size'=>16,'align'=>'center'))),
-            OE_Docx::tc('A',$wA,array('textOpts'=>array('bold'=>true,'size'=>16,'align'=>'center'))),
-            OE_Docx::tc('B',$wA,array('textOpts'=>array('bold'=>true,'size'=>16,'align'=>'center'))),
-            OE_Docx::tc('C',$wAL,array('textOpts'=>array('bold'=>true,'size'=>16,'align'=>'center'))),
-        );
-        $rows=array($hdr);
-        for($r=1;$r<=25;$r++){
-            $odp=($klucz_odpowiedzi!==null&&isset($klucz_odpowiedzi[$r]))?$klucz_odpowiedzi[$r]:-1;
-            $rows[]=array(
-                OE_Docx::tc((string)$r,$wN,array('textOpts'=>array('bold'=>true,'size'=>18,'align'=>'center'))),
-                OE_Docx::tc($odp===0?'X':'',$wA,array('textOpts'=>array('bold'=>true,'size'=>18,'align'=>'center'))),
-                OE_Docx::tc($odp===1?'X':'',$wA,array('textOpts'=>array('bold'=>true,'size'=>18,'align'=>'center'))),
-                OE_Docx::tc($odp===2?'X':'',$wAL,array('textOpts'=>array('bold'=>true,'size'=>18,'align'=>'center'))),
-            );
-        }
-        $d->table($rows,$cw,array('rowHeight'=>220,'headerHeight'=>280));
-    } else {
-        // 75 pytań, 3 grupy
-        $wN=560; $wA=980; $wAL=986;
-        $cw=array($wN,$wA,$wA,$wA,$wN,$wA,$wA,$wA,$wN,$wA,$wA,$wAL);
-        $hdr=array();
-        foreach(array('Nr pytania','A','B','C','Nr pytania','A','B','C','Nr pytania','A','B','C') as $li=>$lbl)
-            $hdr[]=OE_Docx::tc($lbl,$cw[$li],array('textOpts'=>array('bold'=>true,'size'=>16,'align'=>'center')));
-        $rows=array($hdr);
-        for($r=0;$r<25;$r++){
-            $row=array();
-            for($g=0;$g<3;$g++){
-                $n=$g*25+$r+1;
-                $odp=($klucz_odpowiedzi!==null&&isset($klucz_odpowiedzi[$n]))?$klucz_odpowiedzi[$n]:-1;
-                $wLast=($g===2)?$wAL:$wA;
-                $row[]=OE_Docx::tc((string)$n,$wN,array('textOpts'=>array('bold'=>true,'size'=>18,'align'=>'center')));
-                $row[]=OE_Docx::tc($odp===0?'X':'',$wA,array('textOpts'=>array('bold'=>true,'size'=>18,'align'=>'center')));
-                $row[]=OE_Docx::tc($odp===1?'X':'',$wA,array('textOpts'=>array('bold'=>true,'size'=>18,'align'=>'center')));
-                $row[]=OE_Docx::tc($odp===2?'X':'',$wLast,array('textOpts'=>array('bold'=>true,'size'=>18,'align'=>'center')));
-            }
-            $rows[]=$row;
-        }
-        $d->table($rows,$cw,array('rowHeight'=>220,'headerHeight'=>280));
+    // Do 25 pytań jedna grupa kolumn, powyżej trzy (25 i 75 pytań dają dotychczasowy układ).
+    $grupy  = $n_pytan <= 25 ? 1 : 3;
+    $wiersz = (int)ceil($n_pytan / $grupy);
+    $wN     = 560;
+    $wA     = (int)floor((10506 / $grupy - $wN) / 3);
+    $cw     = array();
+    for ($g = 0; $g < $grupy; $g++) {
+        array_push($cw, $wN, $wA, $wA, $wA);
     }
+    $cw[count($cw)-1] = 10506 - (array_sum($cw) - $wA); // ostatnia kolumna dopełnia szerokość
+    $hdr = array();
+    foreach ($cw as $li => $w) {
+        $lbl   = array('Nr pytania','A','B','C');
+        $hdr[] = OE_Docx::tc($lbl[$li % 4],$w,array('textOpts'=>array('bold'=>true,'size'=>16,'align'=>'center')));
+    }
+    $rows = array($hdr);
+    for ($r = 0; $r < $wiersz; $r++) {
+        $row = array();
+        for ($g = 0; $g < $grupy; $g++) {
+            $n   = $g*$wiersz + $r + 1;
+            $jest = $n <= $n_pytan;
+            $odp = ($jest && $klucz_odpowiedzi!==null && isset($klucz_odpowiedzi[$n])) ? $klucz_odpowiedzi[$n] : -1;
+            $row[] = OE_Docx::tc($jest ? (string)$n : '',$cw[$g*4],array('textOpts'=>array('bold'=>true,'size'=>18,'align'=>'center')));
+            $row[] = OE_Docx::tc($odp===0?'X':'',$cw[$g*4+1],array('textOpts'=>array('bold'=>true,'size'=>18,'align'=>'center')));
+            $row[] = OE_Docx::tc($odp===1?'X':'',$cw[$g*4+2],array('textOpts'=>array('bold'=>true,'size'=>18,'align'=>'center')));
+            $row[] = OE_Docx::tc($odp===2?'X':'',$cw[$g*4+3],array('textOpts'=>array('bold'=>true,'size'=>18,'align'=>'center')));
+        }
+        $rows[] = $row;
+    }
+    $d->table($rows,$cw,array('rowHeight'=>220,'headerHeight'=>280));
 
     // ── Stopka ──
     $d->br();
@@ -805,15 +723,7 @@ function oe_doc_arkusze($eg, $uu, $fn) {
 function oe_doc_arkusze_wzor($eg, $fn) {
     $d=new OE_Docx();
     $d->setMargins(700,700,700,700);
-    $klucze=array(
-        'Żeglarz Jachtowy'=>array(1=>1,2=>1,3=>2,4=>1,5=>0,6=>0,7=>1,8=>0,9=>1,10=>2,11=>1,12=>1,13=>2,14=>0,15=>0,16=>1,17=>2,18=>1,19=>1,20=>0,21=>0,22=>2,23=>2,24=>0,25=>2,26=>0,27=>2,28=>1,29=>2,30=>2,31=>2,32=>0,33=>2,34=>0,35=>0,36=>0,37=>1,38=>1,39=>0,40=>2,41=>0,42=>1,43=>0,44=>0,45=>1,46=>2,47=>1,48=>1,49=>0,50=>0,51=>2,52=>0,53=>1,54=>2,55=>0,56=>0,57=>0,58=>1,59=>0,60=>2,61=>2,62=>0,63=>0,64=>0,65=>1,66=>0,67=>2,68=>1,69=>2,70=>0,71=>1,72=>0,73=>2,74=>1,75=>1),
-        'Jachtowy Sternik Morski'=>array(1=>2,2=>2,3=>2,4=>0,5=>1,6=>1,7=>1,8=>2,9=>1,10=>1,11=>0,12=>2,13=>1,14=>2,15=>2,16=>2,17=>2,18=>2,19=>2,20=>1,21=>1,22=>2,23=>2,24=>2,25=>2,26=>2,27=>0,28=>0,29=>0,30=>2,31=>2,32=>2,33=>2,34=>2,35=>1,36=>2,37=>2,38=>1,39=>1,40=>2,41=>1,42=>2,43=>2,44=>1,45=>0,46=>0,47=>0,48=>2,49=>2,50=>2,51=>2,52=>2,53=>2,54=>0,55=>2,56=>0,57=>2,58=>0,59=>0,60=>0,61=>0,62=>2,63=>1,64=>2,65=>1,66=>1,67=>2,68=>2,69=>1,70=>0,71=>2,72=>2,73=>2,74=>1,75=>2),
-        'Sternik Motorowodny'=>array(1=>2,2=>0,3=>2,4=>1,5=>2,6=>0,7=>1,8=>1,9=>0,10=>2,11=>2,12=>1,13=>2,14=>2,15=>0,16=>1,17=>0,18=>2,19=>1,20=>2,21=>0,22=>0,23=>0,24=>2,25=>0,26=>1,27=>1,28=>2,29=>0,30=>0,31=>0,32=>2,33=>1,34=>1,35=>2,36=>0,37=>0,38=>2,39=>0,40=>2,41=>1,42=>0,43=>0,44=>1,45=>1,46=>1,47=>2,48=>1,49=>1,50=>1,51=>0,52=>0,53=>0,54=>2,55=>2,56=>2,57=>1,58=>1,59=>1,60=>0,61=>2,62=>1,63=>0,64=>2,65=>1,66=>1,67=>2,68=>2,69=>0,70=>1,71=>1,72=>0,73=>2,74=>1,75=>2),
-        'Motorowodny Sternik Morski'=>array(1=>0,2=>2,3=>1,4=>1,5=>2,6=>2,7=>0,8=>1,9=>1,10=>2,11=>2,12=>0,13=>1,14=>0,15=>0,16=>1,17=>0,18=>2,19=>0,20=>1,21=>0,22=>2,23=>1,24=>2,25=>1,26=>1,27=>2,28=>2,29=>0,30=>1,31=>0,32=>1,33=>1,34=>1,35=>2,36=>0,37=>2,38=>1,39=>2,40=>1,41=>1,42=>1,43=>2,44=>2,45=>0,46=>2,47=>1,48=>0,49=>1,50=>2,51=>0,52=>2,53=>2,54=>1,55=>0,56=>2,57=>1,58=>0,59=>1,60=>0,61=>1,62=>0,63=>1,64=>0,65=>0,66=>2,67=>2,68=>1,69=>0,70=>1,71=>1,72=>2,73=>1,74=>1,75=>2),
-        'Licencja do holowania narciarza wodnego lub innych obiektów'=>array(1=>1,2=>2,3=>0,4=>0,5=>2,6=>2,7=>2,8=>2,9=>1,10=>0,11=>0,12=>0,13=>1,14=>1,15=>2,16=>1,17=>2,18=>2,19=>1,20=>2,21=>2,22=>2,23=>1,24=>1,25=>0),
-    );
-    $rodzaj=isset($eg['rodzaj_egzaminu'])?$eg['rodzaj_egzaminu']:'';
-    $klucz=isset($klucze[$rodzaj])?$klucze[$rodzaj]:array();
+    $klucz=oe_rodzaj_klucz_map($eg['rodzaj']);
     oe_arkusz_buduj($d,$eg,'WZÓR','WZÓR',empty($klucz)?null:$klucz);
     $d->download($fn);
 }

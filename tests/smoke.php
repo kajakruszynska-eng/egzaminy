@@ -82,10 +82,12 @@ ob_start();
 echo 'PHP ' . PHP_VERSION . ', WordPress ' . get_bloginfo( 'version' ) . "\n";
 
 // ── Reset plugin state ──────────────────────────────────────────────────
-foreach ( get_posts( array( 'post_type' => array( 'oe_egzamin', 'oe_zapis' ), 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids' ) ) as $pid ) {
+foreach ( get_posts( array( 'post_type' => array( 'oe_egzamin', 'oe_zapis', 'oe_rodzaj' ), 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids' ) ) as $pid ) {
     wp_delete_post( $pid, true );
 }
 delete_option( 'oe_settings' );
+delete_option( 'oe_rodzaje_niedopasowane' );
+oe_rodzaje_all( true );
 delete_option( 'oe_caps_version' );
 foreach ( wp_roles()->role_objects as $role ) {
     $role->remove_cap( 'oe_manage_exams' );
@@ -180,7 +182,13 @@ t_issues();
 echo "[seed import]\n";
 $seed = json_decode( file_get_contents( $root . '/seed/ocean-wiedzy.json' ), true );
 t_ok( is_array( $seed ) && isset( $seed['settings'] ), 'seed file parses' );
-update_option( 'oe_settings', array_merge( (array) get_option( 'oe_settings', array() ), oe_sanitize_settings( $seed['settings'] ) ) );
+t_ok( oe_egzamin_rodzaj( $eid ) === null, 'no exam type before import' );
+$imp = oe_importuj_dane( $seed );
+t_ok( $imp['rodzaje'] === 5 && $imp['powiazane'] === 1, 'import created 5 types and linked the exam' );
+$sm = oe_egzamin_rodzaj( $eid );
+t_ok( $sm && $sm['nazwa'] === 'Sternik Motorowodny' && (int) get_post_meta( $eid, '_oe_rodzaj_id', true ) === $sm['id'], 'exam linked to its type by ID' );
+t_ok( $sm && $sm['skrot'] === 'SM' && count( $sm['miejsca_teoria'] ) === 33 && strlen( $sm['klucz'] ) === 75, 'type data imported' );
+t_ok( oe_importuj_dane( $seed )['rodzaje'] === 5 && count( oe_rodzaje_all( true ) ) === 5, 'second import updates instead of duplicating' );
 foreach ( $seed['settings'] as $k => $v ) {
     if ( $v !== '' && oe_setting( $k ) !== $v ) t_ok( false, "setting $k round-trips" );
 }
@@ -212,7 +220,8 @@ oe_metabox_egzamin( $draft );
 $html = ob_get_clean();
 t_ok( strpos( $html, '37 1870 1045 2083 1069 7105 0001' ) !== false, 'new exam gets default account from settings' );
 t_ok( strpos( $html, 'value="250"' ) !== false, 'new exam gets default fee from settings' );
-t_ok( strpos( $html, '"Sternik Motorowodny":"DSW-ZKS.442.41.2022"' ) !== false, 'metabox JS decision map comes from oe_get_decyzje()' );
+t_ok( strpos( $html, '"' . $sm['id'] . '":"DSW-ZKS.442.41.2022"' ) !== false, 'metabox JS decision map comes from exam types' );
+t_ok( strpos( $html, 'name="oe_rodzaj_id"' ) !== false && substr_count( $html, '<option value="' ) >= 5, 'metabox lists exam types' );
 wp_delete_post( $draft->ID, true );
 
 ob_start();
@@ -223,10 +232,89 @@ t_ok( strpos( $html, 'oe_role[editor][]' ) !== false, 'capabilities table lists 
 t_issues();
 
 // ── Decision numbers ────────────────────────────────────────────────────
-echo "[decisions]\n";
-t_ok( oe_get_nr_decyzji_auto( 'Licencja do holowania narciarza' ) === 'DSW-ZKS.442.43.2022', 'short legacy label still resolves' );
-t_ok( oe_get_nr_decyzji_auto( 'Żeglarz Jachtowy' ) === 'DSW-ZKS.442.39.2022', 'exact label resolves' );
-t_ok( oe_get_nr_decyzji_auto( '' ) === '', 'empty label gives empty number' );
+echo "[exam types]\n";
+$lhn = oe_rodzaj_find_by_label( 'Licencja do holowania narciarza' );
+t_ok( $lhn && oe_rodzaj_get( $lhn )['skrot'] === 'LHN', 'short legacy label resolves' );
+t_ok( oe_rodzaj_find_by_label( 'żeglarz jachtowy' ) === oe_rodzaj_find_by_label( 'Żeglarz Jachtowy' ), 'case-insensitive match' );
+t_ok( oe_rodzaj_find_by_label( '' ) === 0 && oe_rodzaj_find_by_label( 'Nieznany patent' ) === 0, 'empty or unknown label gives 0' );
+
+$n = oe_rodzaj_normalize( array(
+    'skrot' => 'ab-1 x', 'klucz' => "ab c\nx a", 'liczba_pytan' => '5', 'miejsca_teoria' => "A\n\n B ",
+    'sekcje' => array( array( 'nazwa' => 'S1', 'min' => '3', 'max' => '1', 'zadania' => "[zawsze] t1\n[nigdy] t2\nt3\n" ), array( 'nazwa' => '', 'zadania' => '' ) ),
+) );
+t_ok( $n['skrot'] === 'AB-1X' && $n['klucz'] === 'ABCA' && $n['liczba_pytan'] === 5 && $n['miejsca_teoria'] === array( 'A', 'B' ), 'normalize: code, key, count, lines' );
+t_ok( count( $n['sekcje'] ) === 1 && $n['sekcje'][0]['max'] === 3 && $n['sekcje'][0]['zadania'][0]['zawsze_poz'] && $n['sekcje'][0]['zadania'][1]['zawsze_nie'] && $n['sekcje'][0]['zadania'][2]['nazwa'] === 't3', 'normalize: sections and task markers' );
+
+// Edit form round trip, including quotes and a backslash.
+$tid = wp_insert_post( array( 'post_type' => 'oe_rodzaj', 'post_status' => 'publish', 'post_title' => 'Typ testowy' ) );
+$_POST = wp_slash( array(
+    'oe_rodzaj_nonce' => wp_create_nonce( 'oe_save_rodzaj' ),
+    'oe_rodzaj'       => array( 'skrot' => 'TT', 'miejsca_teoria' => "Klub \"Test\" \\ 1\r\nJastrząb, Dąbrowa Górnicza\r\nPrzystań", 'sekcje' => array( array( 'nazwa' => 'praktyka', 'min' => 1, 'max' => 2, 'zadania' => "[zawsze] człowiek za burtą\r\nspotkanie z inną jednostką / wyprzedzanie\r\nslalom" ) ), 'klucz' => 'abc' ),
+) );
+wp_update_post( array( 'ID' => $tid, 'post_title' => 'Typ testowy' ) );
+$_POST = array();
+$tt = oe_rodzaj_get( $tid );
+t_ok( $tt['skrot'] === 'TT' && $tt['miejsca_teoria'][0] === 'Klub "Test" \\ 1' && $tt['klucz'] === 'ABC', 'edit form saves data with quotes and backslash intact' );
+t_ok( $tt['miejsca_teoria'] === array( 'Klub "Test" \\ 1', 'Jastrząb, Dąbrowa Górnicza', 'Przystań' ), 'edit form keeps lines with Polish letters whole' );
+$zz = $tt['sekcje'][0]['zadania'];
+t_ok( count( $zz ) === 3 && $zz[0]['nazwa'] === 'człowiek za burtą' && $zz[0]['zawsze_poz'] && $zz[1]['nazwa'] === 'spotkanie z inną jednostką / wyprzedzanie', 'edit form keeps tasks with Polish letters whole' );
+ob_start();
+oe_metabox_rodzaj( get_post( $tid ) );
+$html = ob_get_clean();
+t_ok( strpos( $html, '[zawsze] człowiek za burtą' ) !== false && strpos( $html, 'Klub &quot;Test&quot; \\ 1' ) !== false, 'edit form shows saved values' );
+
+// Rename sync and migration.
+$e2 = wp_insert_post( array( 'post_type' => 'oe_egzamin', 'post_status' => 'publish', 'post_title' => 'Stary' ) );
+update_post_meta( $e2, '_oe_rodzaj_egzaminu', 'Typ testow' );
+oe_migruj_rodzaje_egzaminow();
+t_ok( (int) get_post_meta( $e2, '_oe_rodzaj_id', true ) === $tid && get_post_meta( $e2, '_oe_rodzaj_egzaminu', true ) === 'Typ testowy', 'migration links a legacy label and canonicalizes it' );
+wp_update_post( array( 'ID' => $tid, 'post_title' => 'Typ przemianowany' ) );
+t_ok( get_post_meta( $e2, '_oe_rodzaj_egzaminu', true ) === 'Typ przemianowany', 'renaming a type updates its exams' );
+$e3 = wp_insert_post( array( 'post_type' => 'oe_egzamin', 'post_status' => 'publish', 'post_title' => 'Bez typu' ) );
+update_post_meta( $e3, '_oe_rodzaj_egzaminu', 'Kajak górski' );
+$mig = oe_migruj_rodzaje_egzaminow();
+t_ok( $mig[1] === 1 && (int) get_option( 'oe_rodzaje_niedopasowane' ) === 1, 'unmatched exam is counted' );
+
+// Exam save picks the type and its decision number.
+$zj = oe_rodzaj_find_by_label( 'Żeglarz Jachtowy' );
+$_POST = wp_slash( array( 'oe_egzamin_nonce' => wp_create_nonce( 'oe_save_egzamin' ), 'oe_rodzaj_id' => $zj, 'oe_nr_decyzji' => 'DSW-ZKS.442.41.2022' ) );
+wp_update_post( array( 'ID' => $e3, 'post_title' => 'Bez typu' ) );
+$_POST = array();
+t_ok( (int) get_post_meta( $e3, '_oe_rodzaj_id', true ) === $zj && get_post_meta( $e3, '_oe_rodzaj_egzaminu', true ) === 'Żeglarz Jachtowy', 'exam save stores type ID and name' );
+t_ok( get_post_meta( $e3, '_oe_nr_decyzji', true ) === 'DSW-ZKS.442.39.2022', 'auto decision number follows the new type' );
+
+// Every seeded type must survive render -> browser-style form post -> save unchanged.
+foreach ( oe_rodzaje_all( true ) as $rid => $before ) {
+    if ( $rid === $tid ) continue;
+    ob_start();
+    oe_metabox_rodzaj( get_post( $rid ) );
+    $form = ob_get_clean();
+    $dom = new DOMDocument();
+    @$dom->loadHTML( '<?xml encoding="UTF-8">' . $form );
+    $pairs = array();
+    foreach ( $dom->getElementsByTagName( 'input' ) as $el ) {
+        $name = $el->getAttribute( 'name' );
+        if ( strpos( $name, 'oe_rodzaj' ) !== 0 ) continue;
+        if ( $el->getAttribute( 'type' ) === 'checkbox' && ! $el->hasAttribute( 'checked' ) ) continue;
+        $pairs[] = rawurlencode( $name ) . '=' . rawurlencode( $el->getAttribute( 'value' ) );
+    }
+    foreach ( $dom->getElementsByTagName( 'textarea' ) as $el ) {
+        // Browsers submit textarea newlines as CRLF.
+        $pairs[] = rawurlencode( $el->getAttribute( 'name' ) ) . '=' . rawurlencode( str_replace( "\n", "\r\n", $el->textContent ) );
+    }
+    parse_str( implode( '&', $pairs ), $posted );
+    $_POST = wp_slash( $posted );
+    wp_update_post( array( 'ID' => $rid, 'post_title' => $before['nazwa'] ) );
+    $_POST = array();
+    $after = oe_rodzaj_get( $rid );
+    t_ok( array_intersect_key( $after, oe_rodzaj_puste() ) === array_intersect_key( $before, oe_rodzaj_puste() ), "form round trip keeps {$before['skrot']} unchanged" );
+}
+
+$exp = oe_rodzaj_export( $sm );
+t_ok( oe_rodzaj_normalize( $exp ) === array_intersect_key( $sm, oe_rodzaj_puste() ), 'export round-trips through normalize' );
+foreach ( array( $e2, $e3, $tid ) as $pid ) wp_delete_post( $pid, true );
+oe_migruj_rodzaje_egzaminow();
+t_issues();
 
 // ── Documents (each in a child process) ─────────────────────────────────
 echo "[documents]\n";
@@ -259,6 +347,13 @@ foreach ( array( 'zgloszenie', 'protokol', 'zal1', 'zal2', 'zal3', 'karty', 'zas
     if ( $typ === 'karty' ) {
         t_ok( strpos( $xml, 'KRS 0000881696' ) !== false, 'karty: header registry line' );
         t_ok( strpos( $xml, 'są: Fundacja propagowania sportów wodnych dla każdego Ocean Wiedzy oraz' ) !== false, 'karty: data controller from settings' );
+        t_ok( strpos( $xml, 'manewry na silniku - zadania' ) !== false && strpos( $xml, 'Dołączono zgodę rodziców' ) !== false, 'karty: sections and parental consent from type' );
+    }
+    if ( $typ === 'protokol' ) {
+        t_ok( strpos( $xml, 'powołana przez Fundację propagowania sportów wodnych dla każdego OCEAN WIEDZY w składzie' ) !== false, 'protokol: accusative org name from settings' );
+    }
+    if ( $typ === 'arkusze_wzor' ) {
+        t_ok( substr_count( $xml, '>X<' ) === 75, 'arkusze_wzor: 75 answers marked from the type key' );
     }
 }
 array_map( 'unlink', glob( $tmpdir . '/*' ) ?: array() );

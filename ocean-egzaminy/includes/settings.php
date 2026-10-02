@@ -20,6 +20,7 @@ function oe_settings_fields() {
             'fields' => array(
                 'org_nazwa_pelna'  => array( 'Pełna nazwa', 'text', 'Nagłówki dokumentów, stopka e-maili, klauzula RODO na kartach egzaminacyjnych.' ),
                 'org_nazwa_krotka' => array( 'Nazwa skrócona', 'text', 'Nagłówek e-maili. Puste: pełna nazwa.' ),
+                'org_nazwa_biernik' => array( 'Pełna nazwa w bierniku', 'text', 'Protokół: „Komisja Egzaminacyjna powołana przez …”, np. Fundację … Puste: pełna nazwa.' ),
                 'org_ulica'        => array( 'Ulica i numer', 'text', 'np. ul. Morska 1/2' ),
                 'org_kod'          => array( 'Kod pocztowy', 'text', '' ),
                 'org_miasto'       => array( 'Miejscowość', 'text', '' ),
@@ -88,6 +89,10 @@ function oe_org_nazwa_pelna() {
 
 function oe_org_nazwa_krotka() {
     return oe_setting( 'org_nazwa_krotka' ) ?: oe_org_nazwa_pelna();
+}
+
+function oe_org_nazwa_biernik() {
+    return oe_setting( 'org_nazwa_biernik' ) ?: oe_org_nazwa_pelna();
 }
 
 function oe_org_kod_miasto() {
@@ -187,7 +192,7 @@ function oe_render_settings_page() {
     <div class="wrap">
         <h1>Ustawienia egzaminów</h1>
         <?php if ( $msg === 'import_ok' ) : ?>
-            <div class="notice notice-success is-dismissible"><p>Ustawienia zaimportowane.</p></div>
+            <div class="notice notice-success is-dismissible"><p>Import zakończony. Typy egzaminów: <?php echo isset( $_GET['oe_rodzaje'] ) ? (int) $_GET['oe_rodzaje'] : 0; ?>, egzaminy powiązane z typem: <?php echo isset( $_GET['oe_powiazane'] ) ? (int) $_GET['oe_powiazane'] : 0; ?>.</p></div>
         <?php elseif ( $msg === 'import_blad' ) : ?>
             <div class="notice notice-error is-dismissible"><p>Nie udało się odczytać pliku. Wybierz plik JSON wyeksportowany z tej wtyczki.</p></div>
         <?php elseif ( $msg === 'uprawnienia_ok' ) : ?>
@@ -232,7 +237,7 @@ function oe_render_settings_page() {
 
         <hr>
         <h2>Import i eksport</h2>
-        <p>Eksport zapisuje powyższe ustawienia do pliku JSON. Import nadpisuje pola obecne w pliku, pozostałe zostają bez zmian.</p>
+        <p>Eksport zapisuje powyższe ustawienia i wszystkie typy egzaminów do pliku JSON. Import nadpisuje pola obecne w pliku (pozostałe zostają bez zmian), tworzy lub aktualizuje typy egzaminów o tej samej nazwie i łączy istniejące egzaminy z typami.</p>
         <p>
             <a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=oe_eksport_ustawien' ), 'oe_eksport_ustawien' ) ); ?>">Eksportuj ustawienia (JSON)</a>
         </p>
@@ -271,6 +276,7 @@ add_action( 'admin_post_oe_eksport_ustawien', function() {
         'plugin'   => 'ocean-egzaminy',
         'version'  => OE_VERSION,
         'settings' => is_array( $saved ) ? $saved : array(),
+        'rodzaje'  => array_values( array_map( 'oe_rodzaj_export', oe_rodzaje_all() ) ),
     );
     header( 'Content-Type: application/json; charset=UTF-8' );
     header( 'Content-Disposition: attachment; filename="egzaminy-ustawienia-' . date( 'Y-m-d' ) . '.json"' );
@@ -286,20 +292,45 @@ add_action( 'admin_post_oe_import_ustawien', function() {
     $tmp  = isset( $_FILES['oe_plik']['tmp_name'] ) ? $_FILES['oe_plik']['tmp_name'] : '';
     $json = ( $tmp && is_uploaded_file( $tmp ) ) ? file_get_contents( $tmp ) : '';
     $data = $json ? json_decode( $json, true ) : null;
-    if ( is_array( $data ) && isset( $data['settings'] ) && is_array( $data['settings'] ) ) {
-        $data = $data['settings'];
-    }
     if ( ! is_array( $data ) ) {
         wp_safe_redirect( add_query_arg( 'oe_msg', 'import_blad', $back ) );
         exit;
     }
-    $current = get_option( OE_SETTINGS_OPTION, array() );
-    $merged  = array_merge( is_array( $current ) ? $current : array(), oe_sanitize_settings( $data ) );
-    // update_option runs the registered sanitize callback again; it is idempotent on clean values.
-    update_option( OE_SETTINGS_OPTION, $merged );
-    wp_safe_redirect( add_query_arg( 'oe_msg', 'import_ok', $back ) );
+    $wynik = oe_importuj_dane( $data );
+    wp_safe_redirect( add_query_arg( array( 'oe_msg' => 'import_ok', 'oe_rodzaje' => $wynik['rodzaje'], 'oe_powiazane' => $wynik['powiazane'] ), $back ) );
     exit;
 } );
+
+/**
+ * Import an exported file: settings (merged over current ones) and exam types
+ * (created or updated by name), then link existing exams to types.
+ * Accepts { settings, rodzaje } or a flat settings object.
+ * Returns array( 'rodzaje' => imported types, 'powiazane' => exams linked ).
+ */
+function oe_importuj_dane( $data ) {
+    $settings = isset( $data['settings'] ) && is_array( $data['settings'] ) ? $data['settings'] : ( isset( $data['rodzaje'] ) ? array() : $data );
+    if ( $settings ) {
+        $current = get_option( OE_SETTINGS_OPTION, array() );
+        $merged  = array_merge( is_array( $current ) ? $current : array(), oe_sanitize_settings( $settings ) );
+        // update_option runs the registered sanitize callback again; it is idempotent on clean values.
+        update_option( OE_SETTINGS_OPTION, $merged );
+    }
+    $n_rodzaje = 0;
+    if ( isset( $data['rodzaje'] ) && is_array( $data['rodzaje'] ) ) {
+        $GLOBALS['oe_import_trwa'] = true;
+        foreach ( $data['rodzaje'] as $raw ) {
+            $rid = oe_rodzaj_import( $raw );
+            if ( $rid ) {
+                $n_rodzaje++;
+                oe_rodzaj_synchronizuj_nazwe( $rid );
+            }
+        }
+        $GLOBALS['oe_import_trwa'] = false;
+        oe_rodzaje_all( true );
+    }
+    $migracja = oe_migruj_rodzaje_egzaminow();
+    return array( 'rodzaje' => $n_rodzaje, 'powiazane' => $migracja[0] );
+}
 
 // ── Reminder when the organization profile is empty ──────────────────────
 

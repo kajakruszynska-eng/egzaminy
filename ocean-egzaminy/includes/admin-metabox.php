@@ -37,13 +37,14 @@ function oe_metabox_egzamin( $post ) {
         return esc_attr( get_post_meta( $post->ID, $key, true ) );
     };
 
-    $rodzaje = [
-        'Sternik Motorowodny'                                         => 'Sternik Motorowodny',
-        'Żeglarz Jachtowy'                                            => 'Żeglarz Jachtowy',
-        'Jachtowy Sternik Morski'                                     => 'Jachtowy Sternik Morski',
-        'Motorowodny Sternik Morski'                                  => 'Motorowodny Sternik Morski',
-        'Licencja do holowania narciarza wodnego lub innych obiektów' => 'Licencja do holowania narciarza wodnego lub innych obiektów',
-    ];
+    $rodzaje       = oe_rodzaje_all();
+    $rodzaj_obecny = oe_egzamin_rodzaj( $post->ID );
+    $rodzaj_id     = $rodzaj_obecny ? $rodzaj_obecny['id'] : 0;
+    $rodzaj_stary  = get_post_meta( $post->ID, '_oe_rodzaj_egzaminu', true );
+    // New exam: preselect the first type.
+    if ( ! $rodzaj_id && $rodzaj_stary === '' && $rodzaje ) {
+        $rodzaj_id = (int) array_key_first( $rodzaje );
+    }
 
     $komisja_raw = get_post_meta( $post->ID, '_oe_komisja', true );
     $komisja = is_array( $komisja_raw ) ? $komisja_raw : [
@@ -68,13 +69,21 @@ function oe_metabox_egzamin( $post ) {
     <div class="oe-grid">
         <div class="oe-field">
             <label>Rodzaj egzaminu</label>
-            <select name="oe_rodzaj_egzaminu" id="oe-rodzaj-select" onchange="oeAutoDecyzja(this.value)">
-                <?php foreach ( $rodzaje as $val => $label ) : ?>
-                    <option value="<?php echo esc_attr($val); ?>" <?php selected( $m('_oe_rodzaj_egzaminu'), $val ); ?>>
-                        <?php echo esc_html($label); ?>
+            <select name="oe_rodzaj_id" id="oe-rodzaj-select">
+                <?php if ( ! $rodzaj_id ) : ?>
+                    <option value="">- wybierz -</option>
+                <?php endif; ?>
+                <?php foreach ( $rodzaje as $rid => $typ ) : ?>
+                    <option value="<?php echo (int) $rid; ?>" <?php selected( $rodzaj_id, $rid ); ?>>
+                        <?php echo esc_html( $typ['nazwa'] ); ?>
                     </option>
                 <?php endforeach; ?>
             </select>
+            <?php if ( ! $rodzaje ) : ?>
+                <span style="font-size:11px;color:#b32d2e">Brak typów egzaminów. Dodaj je w Egzaminy &gt; Typy egzaminów.</span>
+            <?php elseif ( ! $rodzaj_id && $rodzaj_stary !== '' ) : ?>
+                <span style="font-size:11px;color:#b32d2e">Zapisany rodzaj „<?php echo esc_html( $rodzaj_stary ); ?>” nie pasuje do żadnego typu. Wybierz typ z listy.</span>
+            <?php endif; ?>
         </div>
         <div class="oe-field">
             <label>Nr egzaminu (w rejestrze)</label>
@@ -84,14 +93,8 @@ function oe_metabox_egzamin( $post ) {
         <div class="oe-field">
             <label>Nr decyzji MSiT</label>
             <?php
-            $decyzje_mapa = oe_get_decyzje();
-            $wybrany_rodzaj   = get_post_meta( $post->ID, '_oe_rodzaj_egzaminu', true );
-            // Przy nowym wpisie meta jeszcze nie istnieje - użyj pierwszego klucza z $rodzaje
-            if ( ! $wybrany_rodzaj ) {
-                $wybrany_rodzaj = array_key_first( $rodzaje );
-            }
             $zapisana_decyzja = get_post_meta( $post->ID, '_oe_nr_decyzji', true );
-            $auto_decyzja     = $decyzje_mapa[ $wybrany_rodzaj ] ?? '';
+            $auto_decyzja     = isset( $rodzaje[ $rodzaj_id ] ) ? $rodzaje[ $rodzaj_id ]['nr_decyzji'] : '';
             $val_decyzji      = $zapisana_decyzja ?: $auto_decyzja;
             ?>
             <input type="text" name="oe_nr_decyzji"
@@ -201,12 +204,20 @@ function oe_metabox_egzamin( $post ) {
 
     <script>
     (function(){
-        var decyzje = <?php echo wp_json_encode( oe_get_decyzje() ); ?>;
+        <?php
+        $js_decyzje = array();
+        $js_miejsca = array();
+        foreach ( $rodzaje as $rid => $typ ) {
+            $js_decyzje[ $rid ] = $typ['nr_decyzji'];
+            $js_miejsca[ $rid ] = array( 'teoria' => $typ['miejsca_teoria'], 'praktyka' => $typ['miejsca_praktyka'] );
+        }
+        ?>
+        var decyzje = <?php echo wp_json_encode( (object) $js_decyzje ); ?>;
         var oeKomisjaIdx = <?php echo count($komisja); ?>;
 
         function oeInitMetabox() {
             // Nr decyzji auto-fill
-            var selRodzaj  = document.querySelector('select[name="oe_rodzaj_egzaminu"]');
+            var selRodzaj  = document.querySelector('select[name="oe_rodzaj_id"]');
             var inpDecyzja = document.querySelector('input[name="oe_nr_decyzji"]');
             if (selRodzaj && inpDecyzja) {
                 selRodzaj.addEventListener('change', function() {
@@ -249,15 +260,7 @@ function oe_metabox_egzamin( $post ) {
         }
 
         // Dane miejsc dla każdego rodzaju egzaminu
-        var oeMiejsca = <?php
-            $miejsca_json = array();
-            if (function_exists('oe_get_miejsca')) {
-                foreach (oe_get_miejsca() as $rodzaj => $typy) {
-                    $miejsca_json[$rodzaj] = $typy;
-                }
-            }
-            echo json_encode($miejsca_json, JSON_UNESCAPED_UNICODE);
-        ?>;
+        var oeMiejsca = <?php echo wp_json_encode( (object) $js_miejsca ); ?>;
 
         function oeOdswiezMiejsca(rodzaj) {
             var dlT = document.getElementById('oe-datalist-teoria');
@@ -287,7 +290,7 @@ function oe_metabox_egzamin( $post ) {
 
         // Odśwież miejsca po zmianie rodzaju
         document.addEventListener('DOMContentLoaded', function() {
-            var selRodzaj = document.querySelector('select[name="oe_rodzaj_egzaminu"]');
+            var selRodzaj = document.querySelector('select[name="oe_rodzaj_id"]');
             if (selRodzaj) {
                 oeOdswiezMiejsca(selRodzaj.value);
                 selRodzaj.addEventListener('change', function() {
@@ -367,19 +370,27 @@ add_action( 'save_post_oe_egzamin', function( $post_id ) {
     if ( defined('DOING_AUTOSAVE') && DOING_AUTOSAVE ) return;
     if ( ! current_user_can('edit_post', $post_id) ) return;
 
-    $decyzje_auto = oe_get_decyzje();
-    $rodzaj_zapisywany = sanitize_text_field( $_POST['oe_rodzaj_egzaminu'] ?? '' );
-    $decyzja_reczna    = sanitize_text_field( $_POST['oe_nr_decyzji'] ?? '' );
-    $decyzja_auto      = $decyzje_auto[ $rodzaj_zapisywany ] ?? '';
+    $typ = oe_rodzaj_get( intval( $_POST['oe_rodzaj_id'] ?? 0 ) );
+    if ( $typ ) {
+        update_post_meta( $post_id, '_oe_rodzaj_id', $typ['id'] );
+        update_post_meta( $post_id, '_oe_rodzaj_egzaminu', wp_slash( $typ['nazwa'] ) );
+    }
+
+    $decyzje_auto = array();
+    foreach ( oe_rodzaje_all() as $t ) {
+        if ( $t['nr_decyzji'] !== '' ) $decyzje_auto[] = $t['nr_decyzji'];
+    }
+    $decyzja_reczna = sanitize_text_field( wp_unslash( $_POST['oe_nr_decyzji'] ?? '' ) );
+    $decyzja_auto   = $typ ? $typ['nr_decyzji'] : '';
     // Jeśli pole decyzji puste lub jest auto-wartością - zawsze wpisz właściwą dla wybranego rodzaju
-    if ( ! $decyzja_reczna || in_array( $decyzja_reczna, array_values($decyzje_auto) ) ) {
-        update_post_meta( $post_id, '_oe_nr_decyzji', $decyzja_auto );
+    if ( ! $decyzja_reczna || in_array( $decyzja_reczna, $decyzje_auto, true ) ) {
+        update_post_meta( $post_id, '_oe_nr_decyzji', wp_slash( $decyzja_auto ) );
     } else {
-        update_post_meta( $post_id, '_oe_nr_decyzji', $decyzja_reczna );
+        update_post_meta( $post_id, '_oe_nr_decyzji', wp_slash( $decyzja_reczna ) );
     }
 
     $pola_tekstowe = [
-        'oe_rodzaj_egzaminu', 'oe_nr_egzaminu', 'oe_miejsce_teoria', 'oe_miejsce_praktyka',
+        'oe_nr_egzaminu', 'oe_miejsce_teoria', 'oe_miejsce_praktyka',
         'oe_data_egzaminu', 'oe_godzina', 'oe_miejscowosc',
         'oe_nr_konta', 'oe_kwota_oplaty', 'oe_wlasciciel_konta',
     ];

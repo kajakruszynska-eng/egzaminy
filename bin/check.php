@@ -102,10 +102,14 @@ foreach ( $files as $f ) {
     $src = file_get_contents( $f );
     $rel = oe_check_rel( $f );
     if ( substr( $src, 0, 3 ) === "\xEF\xBB\xBF" ) oe_check_fail( "$rel: starts with a UTF-8 BOM" );
-    foreach ( preg_split( '/\R/', $src ) as $i => $line ) {
+    foreach ( preg_split( '/\r\n|\r|\n/', $src ) as $i => $line ) {
         $n = $i + 1;
         if ( preg_match( '/(?<![\w$>:])(fn|match)\s*\(/', $line, $mm ) ) {
             oe_check_fail( "$rel:$n: {$mm[1]}( is not allowed: " . trim( $line ) );
+        }
+        // '\R' in a regex without the u flag also matches byte 0x85, part of UTF-8 letters such as "ą".
+        if ( basename( $f ) !== 'check.php' && preg_match( '#\\\\R/(?![a-zA-Z]*u)#', $line ) ) {
+            oe_check_fail( "$rel:$n: \\R without /u splits Polish letters: " . trim( $line ) );
         }
         if ( strpos( $line, "\xE2\x80\x94" ) !== false ) {
             oe_check_fail( "$rel:$n: em dash: " . trim( $line ) );
