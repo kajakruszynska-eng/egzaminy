@@ -194,7 +194,7 @@ function oe_shortcode_formularz( $atts ) {
             <div class="oe-form-pole oe-rodo">
                 <label class="oe-checkbox-label">
                     <input type="checkbox" name="oe_zgoda_rodo" value="1" required>
-                    <span>Wyrażam zgodę na przetwarzanie moich danych osobowych przez Fundację Ocean Wiedzy w celu przeprowadzenia egzaminu na patent żeglarski/motorowodny, zgodnie z RODO (Rozporządzenie PE i Rady (UE) 2016/679). <span class="oe-wymagane">*</span></span>
+                    <span><?php echo esc_html( oe_zgoda_formularz() ); ?> <span class="oe-wymagane">*</span></span>
                 </label>
             </div>
 

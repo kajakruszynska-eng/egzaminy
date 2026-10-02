@@ -34,7 +34,7 @@ add_action( 'wp_head', function() {
         'body.single-oe_egzamin .entry-header .entry-meta',
         // Kadence
         'body.single-oe_egzamin .entry-meta',
-        // OceanWP (używany przez Ocean Wiedzy?)
+        // OceanWP
         'body.single-oe_egzamin .blog-entry-header .blog-entry-meta',
     ]);
     ?>

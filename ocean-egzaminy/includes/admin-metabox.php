@@ -184,18 +184,18 @@ function oe_metabox_egzamin( $post ) {
         <div class="oe-field">
             <label>Nr rachunku bankowego</label>
             <input type="text" name="oe_nr_konta" id="oe-nr-konta"
-                   value="<?php echo $m('_oe_nr_konta') ?: '37 1870 1045 2083 1069 7105 0001'; ?>">
-            <span style="font-size:11px;color:#888">Nest Bank - zmień jeśli inny rachunek</span>
+                   value="<?php echo $m('_oe_nr_konta') ?: esc_attr( oe_setting('bank_konto') ); ?>">
+            <span style="font-size:11px;color:#888"><?php echo esc_html( trim( oe_setting('bank_nazwa') . ' - domyślnie z ustawień, zmień jeśli inny rachunek', ' -' ) ); ?></span>
         </div>
         <div class="oe-field">
             <label>Kwota opłaty (PLN)</label>
             <input type="number" name="oe_kwota_oplaty" id="oe-kwota-oplaty"
-                   value="<?php echo $m('_oe_kwota_oplaty') ?: '250'; ?>" min="0" step="1">
+                   value="<?php echo $m('_oe_kwota_oplaty') ?: esc_attr( oe_setting('kwota_domyslna') ); ?>" min="0" step="1">
         </div>
         <div class="oe-field" style="grid-column:1/-1">
             <label>Właściciel konta</label>
             <input type="text" name="oe_wlasciciel_konta"
-                   value="<?php echo $m('_oe_wlasciciel_konta') ?: 'Fundacja Ocean Wiedzy, ul. Przemysłowa 10/303, 40-020 Katowice'; ?>">
+                   value="<?php echo $m('_oe_wlasciciel_konta') ?: esc_attr( oe_bank_wlasciciel() ); ?>">
         </div>
     </div>
 

@@ -68,7 +68,7 @@ function oe_check_run( $cmd ) {
     return array( proc_close( $proc ), trim( $out ) );
 }
 
-$files = oe_check_php_files( array( $plugin_dir, $root . '/bin' ) );
+$files = oe_check_php_files( array( $plugin_dir, $root . '/bin', $root . '/tests' ) );
 
 // 1. Syntax on every PHP version we target.
 foreach ( oe_check_binaries( $argv, $root ) as $bin ) {

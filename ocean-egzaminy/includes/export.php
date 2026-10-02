@@ -1,18 +1,11 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-// Przycisk eksportu w liście egzaminów
-add_action( 'admin_notices', function() {
-    $screen = get_current_screen();
-    if ( ! $screen || $screen->id !== 'edit-oe_egzamin' ) return;
-    // Komunikat o eksporcie obsługiwany globalnie
-} );
-
 // Eksport CSV z listy zapisów
 add_action( 'admin_post_oe_eksport_csv', 'oe_eksport_csv' );
 
 function oe_eksport_csv() {
-    if ( ! current_user_can('edit_posts') ) wp_die('Brak uprawnień.');
+    if ( ! current_user_can('oe_manage_exams') ) wp_die('Brak uprawnień.');
     check_admin_referer('oe_eksport_csv');
 
     $egzamin_id = isset($_GET['egzamin_id']) ? intval($_GET['egzamin_id']) : 0;

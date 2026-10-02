@@ -1,18 +1,21 @@
 <?php
 /**
- * Plugin Name: Ocean Wiedzy - Zapisy na Egzaminy
- * Description: System zapisów uczestników na egzaminy żeglarskie z panelem admina.
- * Version: 1.0.0
+ * Plugin Name: Zapisy na Egzaminy
+ * Description: System zapisów uczestników na egzaminy żeglarskie z panelem admina i generowaniem dokumentów.
+ * Version: 1.1.0
  * Author: Ocean Wiedzy
  * Text Domain: ocean-egzaminy
+ * Requires PHP: 7.4
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 define( 'OE_PATH', plugin_dir_path( __FILE__ ) );
 define( 'OE_URL',  plugin_dir_url( __FILE__ ) );
-define( 'OE_VERSION', '1.0.0' );
+define( 'OE_VERSION', '1.1.0' );
 
+require_once OE_PATH . 'includes/settings.php';
+require_once OE_PATH . 'includes/capabilities.php';
 require_once OE_PATH . 'includes/post-type.php';
 require_once OE_PATH . 'includes/admin-columns.php';
 require_once OE_PATH . 'includes/admin-metabox.php';
@@ -31,4 +34,5 @@ register_activation_hook( __FILE__, 'oe_activate' );
 function oe_activate() {
     oe_register_post_types();
     flush_rewrite_rules();
+    oe_grant_admin_caps();
 }

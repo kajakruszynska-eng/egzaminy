@@ -1,0 +1,28 @@
+{
+    "plugin": "ocean-egzaminy",
+    "version": "1.1.0",
+    "settings": {
+        "org_nazwa_pelna": "Fundacja propagowania sportów wodnych dla każdego Ocean Wiedzy",
+        "org_nazwa_krotka": "Fundacja Ocean Wiedzy",
+        "org_ulica": "ul. Przemysłowa 10/303",
+        "org_kod": "40-020",
+        "org_miasto": "Katowice",
+        "org_krs": "0000881696",
+        "org_nip": "6342991899",
+        "org_regon": "388227941",
+        "org_logo_url": "",
+        "org_telefon": "+48 660 785 002",
+        "email_reply_to": "biuro@ocean-wiedzy.pl",
+        "email_podtytul": "Egzaminy żeglarskie i motorowodne",
+        "podpis_imie": "Marek Kruszyński",
+        "podpis_funkcja": "Wiceprezes Zarządu",
+        "bank_nazwa": "Nest Bank",
+        "bank_konto": "37 1870 1045 2083 1069 7105 0001",
+        "bank_wlasciciel": "Fundacja Ocean Wiedzy, ul. Przemysłowa 10/303, 40-020 Katowice",
+        "kwota_domyslna": "250",
+        "blik_telefon": "+48 609 133 311",
+        "blik_logo_url": "https://serwer1816332.home.pl/ocean-wiedzy/ocean_wiedzy/wp-content/uploads/2026/04/Blik_logo.svg-scaled.png",
+        "dok_miasto": "Katowice",
+        "zgoda_formularz": "Wyrażam zgodę na przetwarzanie moich danych osobowych przez Fundację Ocean Wiedzy w celu przeprowadzenia egzaminu na patent żeglarski/motorowodny, zgodnie z RODO (Rozporządzenie PE i Rady (UE) 2016/679)."
+    }
+}

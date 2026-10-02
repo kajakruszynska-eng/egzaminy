@@ -41,8 +41,8 @@ function oe_wyslij_email_potwierdzenie( $zapis_id ) {
     $godzina     = get_post_meta($egzamin_id, '_oe_godzina',          true);
     $miejsce     = get_post_meta($egzamin_id, '_oe_miejsce_pelne',    true);
     $kwota_raw   = floatval( get_post_meta($egzamin_id, '_oe_kwota_oplaty', true) );
-    $konto       = get_post_meta($egzamin_id, '_oe_nr_konta',         true) ?: '37 1870 1045 2083 1069 7105 0001';
-    $wlasciciel  = get_post_meta($egzamin_id, '_oe_wlasciciel_konta', true) ?: 'Fundacja Ocean Wiedzy, ul. Przemysłowa 10/303, 40-020 Katowice';
+    $konto       = get_post_meta($egzamin_id, '_oe_nr_konta',         true) ?: oe_setting('bank_konto');
+    $wlasciciel  = get_post_meta($egzamin_id, '_oe_wlasciciel_konta', true) ?: oe_bank_wlasciciel();
     $nr_decyzji  = get_post_meta($egzamin_id, '_oe_nr_decyzji',       true) ?: oe_get_nr_decyzji_auto($rodzaj);
 
     $data_fmt    = $data_egz ? date_i18n('d.m.Y', strtotime($data_egz)) : '';
@@ -50,8 +50,10 @@ function oe_wyslij_email_potwierdzenie( $zapis_id ) {
     $kwota_str   = number_format($kwota, 2, ',', ' ') . ' PLN';
     $kwota_full  = number_format($kwota_raw, 2, ',', ' ') . ' PLN';
     $tytul_prz   = "Opłata za egzamin na patent {$rodzaj}: {$data_fmt}, {$imie} {$nazwisko}";
-    $blik_url    = 'https://serwer1816332.home.pl/ocean-wiedzy/ocean_wiedzy/wp-content/uploads/2026/04/Blik_logo.svg-scaled.png';
-    $temat       = "Potwierdzenie zapisu - egzamin {$rodzaj} {$data_fmt}";
+    $blik_tel    = oe_setting('blik_telefon');
+    $telefon     = oe_setting('org_telefon');
+    $podpis      = oe_setting('podpis_imie');
+    $temat      = "Potwierdzenie zapisu - egzamin {$rodzaj} {$data_fmt}";
 
     ob_start();
     echo oe_email_naglowek();
@@ -87,14 +89,16 @@ function oe_wyslij_email_potwierdzenie( $zapis_id ) {
     </tr>
   </table>
 
+  <?php if ($blik_tel) : ?>
   <div style="margin-top:16px;padding-top:14px;border-top:1px solid #AED6F1">
     <p style="margin:0 0 10px;font-size:13px;color:#555">lub <strong>przelew BLIK na telefon:</strong></p>
     <table><tr>
-      <td style="padding-right:12px"><img src="<?php echo esc_url($blik_url); ?>" alt="BLIK" style="height:28px;width:auto;display:block"></td>
-      <td style="font-size:18px;font-weight:700;color:#1a5276">+48 609 133 311</td>
+      <td style="padding-right:12px"><?php echo oe_email_blik_logo(28); ?></td>
+      <td style="font-size:18px;font-weight:700;color:#1a5276"><?php echo esc_html($blik_tel); ?></td>
     </tr></table>
     <p style="margin:8px 0 0;font-size:12px;color:#777">Kwota: <strong><?php echo esc_html($kwota_str); ?></strong> &nbsp;|&nbsp; Tytuł: <?php echo esc_html($tytul_prz); ?></p>
   </div>
+  <?php endif; ?>
 </div>
 
 <?php if ($znizka) : ?>
@@ -112,13 +116,17 @@ function oe_wyslij_email_potwierdzenie( $zapis_id ) {
 
 <p style="font-size:14px">Cena egzaminu jest ceną urzędową.</p>
 <p style="font-size:14px">Odeślij nam albo weź ze sobą dowód przelewu.</p>
-<p style="font-size:14px">W razie potrzeby dzwoń do nas bez skrępowania: <strong>tel. +48 660 785 002</strong></p>
+<?php if ($telefon) : ?>
+<p style="font-size:14px">W razie potrzeby dzwoń do nas bez skrępowania: <strong>tel. <?php echo esc_html($telefon); ?></strong></p>
+<?php endif; ?>
 
+<?php if ($podpis) : ?>
 <table style="width:100%;margin-top:20px;border-top:1px solid #e8e8e8"><tr><td style="padding-top:14px;font-size:14px">
   <p style="margin:0 0 2px">Pozdrawiam,</p>
-  <p style="margin:0 0 2px;font-weight:600">Marek Kruszyński</p>
-  <p style="margin:0;color:#777;font-size:12px">Wiceprezes Zarządu</p>
+  <p style="margin:0 0 2px;font-weight:600"><?php echo esc_html($podpis); ?></p>
+  <?php if (oe_setting('podpis_funkcja')) : ?><p style="margin:0;color:#777;font-size:12px"><?php echo esc_html(oe_setting('podpis_funkcja')); ?></p><?php endif; ?>
 </td></tr></table>
+<?php endif; ?>
 
 <?php if ($nr_decyzji) : ?>
 <p style="margin-top:16px;font-size:11px;color:#aaa">Decyzja MSiT: <?php echo esc_html($nr_decyzji); ?></p>
@@ -213,8 +221,8 @@ function oe_wyslij_email_zmiana_statusu( $zapis_id, $nowy_status ) {
   <li>Prosimy o przybycie co najmniej <strong>15 minut przed wyznaczoną godziną</strong></li>
   <li>Zabierz <strong>dowód tożsamości</strong></li>" .
   ($znizka ? "<li>Zabierz <strong>ważną legitymację ucznia lub studenta</strong></li>" : "") . "
-</ul>
-<p>W razie pytań: <strong>tel. +48 660 785 002</strong></p>";
+</ul>" .
+  ( oe_email_kontakt() !== '' ? "<p>W razie pytań: <strong>" . esc_html( oe_email_kontakt() ) . "</strong></p>" : "" );
         $tresc .= oe_email_stopka();
 
     } elseif ( $nowy_status === 'oe_odrzucony' ) {
@@ -223,8 +231,8 @@ function oe_wyslij_email_zmiana_statusu( $zapis_id, $nowy_status ) {
         $tresc .= "
 <h2 style='color:#c62828;margin:0 0 16px'>Informacja o Twoim zapisie</h2>
 <p>Drogi/a <strong>" . esc_html($imie . ' ' . $nazwisko) . "</strong>,</p>
-<p>Z przykrością informujemy, że Twój zapis na egzamin <strong>" . esc_html($rodzaj) . "</strong> (" . esc_html($data_fmt) . ") nie mógł zostać zatwierdzony.</p>
-<p>W celu wyjaśnienia prosimy o kontakt: <strong>tel. +48 660 785 002</strong></p>";
+<p>Z przykrością informujemy, że Twój zapis na egzamin <strong>" . esc_html($rodzaj) . "</strong> (" . esc_html($data_fmt) . ") nie mógł zostać zatwierdzony.</p>" .
+  ( oe_email_kontakt() !== '' ? "<p>W celu wyjaśnienia prosimy o kontakt: <strong>" . esc_html( oe_email_kontakt() ) . "</strong></p>" : "<p>W celu wyjaśnienia prosimy o kontakt z organizatorem.</p>" );
         $tresc .= oe_email_stopka();
     } else {
         return;
@@ -232,47 +240,81 @@ function oe_wyslij_email_zmiana_statusu( $zapis_id, $nowy_status ) {
     oe_wyslij_html( $email, $temat, $tresc );
 }
 
+/** "tel. X" when a phone is configured, otherwise the Reply-To address, otherwise ''. */
+function oe_email_kontakt() {
+    if ( oe_setting('org_telefon') !== '' ) return 'tel. ' . oe_setting('org_telefon');
+    return oe_setting('email_reply_to');
+}
+
+function oe_email_blik_logo( $height ) {
+    $logo = oe_setting('blik_logo_url');
+    if ( $logo === '' ) return "<strong style='color:#555'>BLIK</strong>";
+    return "<img src='" . esc_url($logo) . "' alt='BLIK' style='height:" . intval($height) . "px;width:auto;vertical-align:middle;display:block'>";
+}
+
 function oe_email_naglowek() {
+    $logo     = oe_setting('org_logo_url');
+    $podtytul = oe_setting('email_podtytul');
     return "<!DOCTYPE html><html><head><meta charset='UTF-8'></head>
 <body style='margin:0;padding:0;background:#f4f6f9;font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#2c3e50'>
 <div style='max-width:620px;margin:30px auto;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e1e4e8'>
 <div style='background:#1a5276;padding:20px 28px'>
-  <p style='color:#fff;margin:0;font-size:19px;font-weight:700'>Fundacja Ocean Wiedzy</p>
-  <p style='color:#AED6F1;margin:4px 0 0;font-size:12px'>Egzaminy żeglarskie i motorowodne</p>
+  " . ( $logo !== '' ? "<img src='" . esc_url($logo) . "' alt='' style='max-height:48px;width:auto;display:block;margin:0 0 10px'>" : "" ) . "
+  <p style='color:#fff;margin:0;font-size:19px;font-weight:700'>" . esc_html( oe_org_nazwa_krotka() ) . "</p>
+  " . ( $podtytul !== '' ? "<p style='color:#AED6F1;margin:4px 0 0;font-size:12px'>" . esc_html($podtytul) . "</p>" : "" ) . "
 </div>
 <div style='padding:28px 32px'>
 ";
 }
 
 function oe_email_stopka() {
-    $blik = 'https://serwer1816332.home.pl/ocean-wiedzy/ocean_wiedzy/wp-content/uploads/2026/04/Blik_logo.svg-scaled.png';
-    $url  = home_url('/');
-    $name = get_bloginfo('name');
-    return "
+    $url      = esc_url( home_url('/') );
+    $name     = esc_html( get_bloginfo('name') );
+    $adres    = esc_html( implode( ' | ', array_filter( array( oe_org_adres(), oe_org_rejestry(' | ') ) ) ) );
+    $telefon  = oe_setting('org_telefon');
+    $konto    = oe_setting('bank_konto');
+    $bank     = oe_setting('bank_nazwa');
+    $blik_tel = oe_setting('blik_telefon');
+
+    $html  = "
 </div>
 <div style='background:#f4f6f9;padding:18px 32px;border-top:1px solid #e1e4e8;font-size:12px;color:#777'>
-  <p style='margin:0 0 4px;font-weight:600;color:#555'>Fundacja propagowania sportów wodnych dla każdego Ocean Wiedzy</p>
-  <p style='margin:0 0 4px'>ul. Przemysłowa 10/303, 40-020 Katowice &nbsp;|&nbsp; KRS 0000881696 &nbsp;|&nbsp; NIP 6342991899 &nbsp;|&nbsp; REGON 388227941</p>
-  <p style='margin:0 0 6px'>Tel.: +48 660 785 002 &nbsp;|&nbsp; <a href='{$url}' style='color:#1a5276'>{$name}</a></p>
-  <table><tr>
-    <td style='padding-right:6px;color:#555'>Konto Nest Bank: <strong>PL37 1870 1045 2083 1069 7105 0001</strong></td>
-  </tr><tr>
+  <p style='margin:0 0 4px;font-weight:600;color:#555'>" . esc_html( oe_org_nazwa_pelna() ) . "</p>";
+    if ( $adres !== '' ) {
+        $html .= "
+  <p style='margin:0 0 4px'>" . str_replace( ' | ', ' &nbsp;|&nbsp; ', $adres ) . "</p>";
+    }
+    $html .= "
+  <p style='margin:0 0 6px'>" . ( $telefon !== '' ? 'Tel.: ' . esc_html($telefon) . " &nbsp;|&nbsp; " : '' ) . "<a href='{$url}' style='color:#1a5276'>{$name}</a></p>
+  <table>";
+    if ( $konto !== '' ) {
+        $html .= "<tr>
+    <td style='padding-right:6px;color:#555'>Konto" . ( $bank !== '' ? ' ' . esc_html($bank) : '' ) . ": <strong>PL" . esc_html($konto) . "</strong></td>
+  </tr>";
+    }
+    if ( $blik_tel !== '' ) {
+        $html .= "<tr>
     <td style='padding-top:6px'>
       <table><tr>
-        <td style='padding-right:8px'><img src='{$blik}' alt='BLIK' style='height:20px;width:auto;vertical-align:middle'></td>
-        <td style='font-weight:600;color:#555'>+48 609 133 311</td>
+        <td style='padding-right:8px'>" . oe_email_blik_logo(20) . "</td>
+        <td style='font-weight:600;color:#555'>" . esc_html($blik_tel) . "</td>
       </tr></table>
     </td>
-  </tr></table>
+  </tr>";
+    }
+    $html .= "</table>
 </div>
 </div></body></html>";
+    return $html;
 }
 
 function oe_wyslij_html( $do, $temat, $tresc ) {
     $headers = [
         'Content-Type: text/html; charset=UTF-8',
         'From: ' . get_bloginfo('name') . ' <' . get_option('admin_email') . '>',
-        'Reply-To: biuro@ocean-wiedzy.pl',
     ];
+    if ( oe_setting('email_reply_to') !== '' ) {
+        $headers[] = 'Reply-To: ' . oe_setting('email_reply_to');
+    }
     wp_mail( $do, $temat, $tresc, $headers );
 }

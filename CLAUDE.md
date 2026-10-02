@@ -24,11 +24,18 @@ Owner: K, freelance developer. She communicates in Polish, so talk to her in Pol
 bin/
   check.php                  pre-finish checks (lint on 7.4 and 8.x, duplicates, forbidden syntax, em dash, BOM, braces, bootstrap)
   build-zip.php              builds dist/ocean-egzaminy-<version>.zip
-.tools/                      local portable PHP 7.4 and 8.x for checks (git-ignored)
+tests/
+  smoke.php                  runtime test against a local WordPress (see docs/TESTING.md)
+  wp-install.php             installs that local WordPress
+seed/
+  ocean-wiedzy.json          K's organization settings, imported on the settings page (not shipped in the zip)
+.tools/                      local PHP 7.4 and 8.x, test WordPress on SQLite (git-ignored)
 dist/                        built zips (git-ignored)
 ocean-egzaminy/              plugin root
   ocean-egzaminy.php         bootstrap, requires every include
   includes/
+    settings.php             oe_settings option, settings page, oe_setting() and derived helpers, JSON import/export
+    capabilities.php         oe_manage_exams, oe_generate_documents, role assignment UI
     post-type.php            CPT oe_egzamin (exams), oe_zapis (signups), signup statuses
     admin-metabox.php        exam data metabox, shortcode metabox, save handler
     admin-columns.php        list table columns and bulk actions
@@ -44,7 +51,10 @@ ocean-egzaminy/              plugin root
     generator.php            9 DOCX documents and the download handler
 docs/
   UNIVERSALIZATION.md        plan for multi-organization version
+  TESTING.md                 how to run and rebuild the test setup
 ```
+
+Organization data never goes in code: read it with `oe_setting( 'key' )` or a helper from `settings.php` (`oe_org_nazwa_pelna()`, `oe_org_adres()`, `oe_org_rejestry()`, `oe_dok_miasto_data()`, ...). Access checks use `oe_manage_exams` or `oe_generate_documents`, never `edit_posts`.
 
 ## Domain notes
 
@@ -58,8 +68,9 @@ docs/
 
 1. `php bin/check.php` must print "All checks passed." It covers lint on PHP 7.4 and 8.x (from `.tools/`, or binaries passed as arguments), duplicate function names, `fn(` and `match(`, em dash, BOM, brace balance, and that the bootstrap requires every include. On Windows: `.tools\php74\php.exe bin\check.php`.
 2. Past fatal errors came from scripted edits that duplicated a function or truncated a file's end. Prefer small targeted edits over regenerating whole files. Save PHP files as UTF-8 without BOM.
-3. `php bin/build-zip.php` rebuilds the zip and confirms it contains `ocean-egzaminy/ocean-egzaminy.php`.
-4. Commit and push to `main`.
+3. `php tests/smoke.php` on PHP 7.4 and 8.x must print "Smoke test passed." Extend it when you add behavior.
+4. `php bin/build-zip.php` rebuilds the zip and confirms it contains `ocean-egzaminy/ocean-egzaminy.php`.
+5. Commit and push to `main`.
 
 ## Known quirks
 

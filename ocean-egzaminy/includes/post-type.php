@@ -25,6 +25,8 @@ function oe_register_post_types() {
         'has_archive'         => false,
         'rewrite'             => [ 'slug' => 'egzamin' ],
         'show_in_rest'        => false,
+        'capabilities'        => oe_cpt_capabilities(),
+        'map_meta_cap'        => true,
     ] );
 
     // ── CPT: Zapis uczestnika ─────────────────────────────────────────────
@@ -42,9 +44,9 @@ function oe_register_post_types() {
         'supports'            => [ 'title' ],
         'has_archive'         => false,
         'show_in_rest'        => false,
-        'capabilities'        => [
+        'capabilities'        => oe_cpt_capabilities( [
             'create_posts'    => 'do_not_allow',  // blokuj ręczne tworzenie
-        ],
+        ] ),
         'map_meta_cap'        => true,
     ] );
 

@@ -4,6 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 // ── Metabox z przyciskami ─────────────────────────────────────────────────
 
 add_action( 'add_meta_boxes', function() {
+    if ( ! current_user_can( 'oe_generate_documents' ) ) return;
     add_meta_box( 'oe_generuj_dokumenty', 'Generuj dokumenty DOCX', 'oe_metabox_generuj', 'oe_egzamin', 'side', 'default' );
 } );
 
@@ -40,7 +41,7 @@ function oe_handle_generuj_docx() {
     $typ = isset($_GET['typ'])        ? sanitize_text_field($_GET['typ']) : '';
     if (!$eid || !$typ) wp_die('Nieprawidłowe żądanie.');
     check_admin_referer('oe_generuj_'.$eid);
-    if (!current_user_can('edit_posts')) wp_die('Brak uprawnień.');
+    if (!current_user_can('oe_generate_documents')) wp_die('Brak uprawnień.');
 
     $eg = oe_get_eg($eid);
     $uu = oe_get_uu($eid);
@@ -162,10 +163,12 @@ function oe_ascii($str) {
 
 // Nagłówek fundacji (wyśrodkowany)
 function oe_hdr(OE_Docx $d, $eg) {
-    $d->pRuns(array(array('text'=>'Fundacja propagowania sportów wodnych dla każdego Ocean Wiedzy','bold'=>true,'size'=>18)),array('align'=>'center','before'=>0,'after'=>80));
-    $d->pRuns(array(array('text'=>'ul. Przemysłowa 10/303, 40-020 Katowice','size'=>16)),array('align'=>'center','after'=>40));
-    $d->pRuns(array(array('text'=>'KRS 0000881696  NIP 6342991899  REGON 388227941','size'=>16)),array('align'=>'center','after'=>40));
-    $d->pRuns(array(array('text'=>'DECYZJA MSiT '.($eg['nr_decyzji']??''),'bold'=>true,'size'=>16)),array('align'=>'center','after'=>280));
+    $d->pRuns(array(array('text'=>oe_org_nazwa_pelna(),'bold'=>true,'size'=>18)),array('align'=>'center','before'=>0,'after'=>80));
+    $d->pRuns(array(array('text'=>oe_org_adres(),'size'=>16)),array('align'=>'center','after'=>40));
+    if (oe_org_rejestry() !== '') {
+        $d->pRuns(array(array('text'=>oe_org_rejestry(),'size'=>16)),array('align'=>'center','after'=>40));
+    }
+    $d->pRuns(array(array('text'=>'DECYZJA MSiT'.($eg['nr_decyzji']??''),'bold'=>true,'size'=>16)),array('align'=>'center','after'=>280));
 }
 
 // Miejscowość + data (wyrównane do prawej)
@@ -202,12 +205,12 @@ function oe_doc_zgloszenie($eg,$fn) {
     $komisja = $eg['komisja'];
 
     // Data i miejsce wystawienia - prawy górny róg (samo, bez podpisu)
-    $d->pRuns(array(array('text'=>'Katowice, '.$eg['data_utworzenia'],'size'=>18)),array('align'=>'right','after'=>160));
+    $d->pRuns(array(array('text'=>oe_dok_miasto_data($eg['data_utworzenia']),'size'=>18)),array('align'=>'right','after'=>160));
 
-    // Nagłówek fundacji po lewej (nie wyśrodkowany jak w innych)
-    $d->pRuns(array(array('text'=>'Fundacja propagowania sportów wodnych dla każdego Ocean Wiedzy','bold'=>true,'size'=>18)),array('after'=>40));
-    $d->pRuns(array(array('text'=>'ul. Przemysłowa 10/303','size'=>18)),array('after'=>20));
-    $d->pRuns(array(array('text'=>'40-020 Katowice','size'=>18)),array('after'=>240));
+    // Nagłówek organizacji po lewej (nie wyśrodkowany jak w innych)
+    $d->pRuns(array(array('text'=>oe_org_nazwa_pelna(),'bold'=>true,'size'=>18)),array('after'=>40));
+    $d->pRuns(array(array('text'=>oe_setting('org_ulica'),'size'=>18)),array('after'=>20));
+    $d->pRuns(array(array('text'=>oe_org_kod_miasto(),'size'=>18)),array('after'=>240));
 
     $d->pRuns(array(array('text'=>'ZGŁOSZENIE EGZAMINU W ZAKRESIE','bold'=>true,'size'=>24)),array('align'=>'center','after'=>40));
     $d->pRuns(array(array('text'=>'UPRAWIANIA TURYSTYKI WODNEJ','bold'=>true,'size'=>24)),array('align'=>'center','after'=>200));
@@ -266,7 +269,7 @@ function oe_doc_zgloszenie($eg,$fn) {
     $d->br(2);
 
     // Stopka - pełna
-    $d->pRuns(array(array('text'=>'Katowice, '.$eg['data_utworzenia'],'italic'=>true,'size'=>18)),array('after'=>20));
+    $d->pRuns(array(array('text'=>oe_dok_miasto_data($eg['data_utworzenia']),'italic'=>true,'size'=>18)),array('after'=>20));
     $d->pRuns(array(array('text'=>'(miejsce i data wystawienia zgłoszenia)','italic'=>true,'size'=>16)),array('after'=>120));
     $d->pRuns(array(array('text'=>$eg['osoba_podpisujaca']??'','italic'=>true,'size'=>18)),array('after'=>20));
     $d->pRuns(array(array('text'=>'(imię i nazwisko osoby upoważnionej do sporządzenia informacji)','italic'=>true,'size'=>16)),array('after'=>0));
@@ -604,7 +607,7 @@ function oe_doc_karty($eg, $uu, $fn) {
 
         // RODO
         $d->p('Oświadczam, że zostałam poinformowana że:',array('italic'=>true,'size'=>18,'after'=>60));
-        $d->p('– administratorami zbiorów powyższych danych są: Fundacja propagowania sportów wodnych dla każdego Ocean Wiedzy oraz Ministerstwo Sportu i Turystyki.',array('italic'=>true,'size'=>16,'after'=>60));
+        $d->p('– administratorami zbiorów powyższych danych są: '.oe_org_nazwa_pelna().' oraz Ministerstwo Sportu i Turystyki.',array('italic'=>true,'size'=>16,'after'=>60));
         $d->p('– powyższe dane osobowe są zbierane w celach dowodowych zgodnie z § 19 ust. 2 Rozporządzenie Ministra Sportu i Turystyki z 9 kwietnia 2013 r. w sprawie uprawiania turystyki wodnej (Dz. U. 2013 poz. 460) i nie będą udostępniane do innych celów.',array('italic'=>true,'size'=>16,'after'=>80));
         $d->p('Wyrażam zgodę na przetwarzanie moich danych osobowych dla potrzeb niezbędnych do przeprowadzenia egzaminu na patenty żeglarskie, motorowodne i licencje, zgodnie z Rozporządzeniem Parlamentu Europejskiego i Rady (UE) 2016/679 z dnia 27 kwietnia 2016 r.',array('size'=>16,'after'=>80));
         if (in_array($rodzaj, array('Żeglarz Jachtowy','Sternik Motorowodny'))) {

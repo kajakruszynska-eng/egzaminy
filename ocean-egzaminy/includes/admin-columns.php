@@ -190,7 +190,7 @@ add_action( 'admin_post_oe_zmien_status', function() {
 
     check_admin_referer( 'oe_zmien_status_' . $post_id );
 
-    if ( ! current_user_can( 'edit_posts' ) ) {
+    if ( ! current_user_can( 'oe_manage_exams' ) ) {
         wp_die( 'Brak uprawnień.' );
     }
 
@@ -232,7 +232,7 @@ add_filter( 'bulk_actions-edit-oe_zapis', function( $actions ) {
 } );
 
 add_filter( 'handle_bulk_actions-edit-oe_zapis', function( $redirect, $action, $post_ids ) {
-    if ( ! in_array( $action, [ 'oe_bulk_zatwierdz', 'oe_bulk_odrzuc' ] ) ) {
+    if ( ! in_array( $action, [ 'oe_bulk_zatwierdz', 'oe_bulk_odrzuc' ] ) || ! current_user_can( 'oe_manage_exams' ) ) {
         return $redirect;
     }
     $nowy = ( $action === 'oe_bulk_zatwierdz' ) ? 'oe_zatwierdzony' : 'oe_odrzucony';
