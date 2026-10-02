@@ -4,17 +4,58 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 add_action( 'admin_post_nopriv_oe_zapisz_uczestnika', 'oe_obsluga_formularza' );
 add_action( 'admin_post_oe_zapisz_uczestnika',         'oe_obsluga_formularza' );
 
-function oe_obsluga_formularza() {
-    if ( session_status() === PHP_SESSION_NONE ) session_start();
+/**
+ * Store a one-time message (and optionally the submitted form data) in a
+ * short-lived transient and redirect back with its token in ?oe_msg=.
+ * The [formularz_egzaminu] shortcode reads it with oe_pobierz_komunikat().
+ */
+function oe_przekieruj_z_komunikatem( $redirect, $egzamin_id, $typ, $tresc, $dane = array() ) {
+    $token = strtolower( wp_generate_password( 32, false, false ) );
+    set_transient( 'oe_msg_' . $token, array(
+        'egzamin_id' => (int) $egzamin_id,
+        'typ'        => $typ,
+        'tresc'      => $tresc,
+        'dane'       => $dane,
+    ), 15 * MINUTE_IN_SECONDS );
+    wp_safe_redirect( add_query_arg( 'oe_msg', $token, remove_query_arg( 'oe_msg', $redirect ) ) );
+    exit;
+}
 
+/**
+ * Message stored by oe_przekieruj_z_komunikatem() for this exam, or null.
+ * The transient is deleted on first read; the result is kept for the rest of
+ * the request so the shortcode may render more than once.
+ */
+function oe_pobierz_komunikat( $egzamin_id ) {
+    static $cache = array();
+    $token = isset( $_GET['oe_msg'] ) ? preg_replace( '/[^a-z0-9]/', '', strtolower( (string) $_GET['oe_msg'] ) ) : '';
+    if ( $token === '' ) return null;
+    if ( ! array_key_exists( $token, $cache ) ) {
+        $msg = get_transient( 'oe_msg_' . $token );
+        delete_transient( 'oe_msg_' . $token );
+        $cache[ $token ] = is_array( $msg ) ? $msg : null;
+    }
+    $msg = $cache[ $token ];
+    if ( ! $msg || (int) $msg['egzamin_id'] !== (int) $egzamin_id ) return null;
+    return $msg;
+}
+
+/** Submitted values of the given fields, to refill the form after an error. */
+function oe_dane_formularza( $pola ) {
+    $dane = array();
+    foreach ( $pola as $p ) {
+        if ( isset( $_POST[ $p ] ) ) $dane[ $p ] = sanitize_text_field( wp_unslash( $_POST[ $p ] ) );
+    }
+    return $dane;
+}
+
+function oe_obsluga_formularza() {
     $egzamin_id = isset($_POST['oe_egzamin_id']) ? intval($_POST['oe_egzamin_id']) : 0;
     $redirect   = isset($_POST['oe_redirect']) ? esc_url_raw($_POST['oe_redirect']) : home_url('/');
 
     // ── Walidacja nonce ───────────────────────────────────────────────────
     if ( ! $egzamin_id || ! wp_verify_nonce( $_POST['oe_nonce'] ?? '', 'oe_zapis_' . $egzamin_id ) ) {
-        $_SESSION['oe_blad_' . $egzamin_id] = 'Błąd bezpieczeństwa. Odśwież stronę i spróbuj ponownie.';
-        wp_safe_redirect( $redirect );
-        exit;
+        oe_przekieruj_z_komunikatem( $redirect, $egzamin_id, 'blad', 'Błąd bezpieczeństwa. Odśwież stronę i spróbuj ponownie.' );
     }
 
     // ── Funkcja pomocnicza: zapisz dane i przekieruj z błędem ───────────
@@ -27,22 +68,12 @@ function oe_obsluga_formularza() {
                   'oe_ulica', 'oe_kod', 'oe_miasto', 'oe_email', 'oe_telefon' ];
     foreach ( $wymagane as $pole ) {
         if ( empty( trim( $_POST[$pole] ?? '' ) ) ) {
-            $_SESSION['oe_blad_' . $egzamin_id] = 'Wypełnij wszystkie wymagane pola.';
-            foreach ( $pola_formularza as $p ) {
-                if ( isset($_POST[$p]) ) $_SESSION['oe_dane_' . $egzamin_id][$p] = $_POST[$p];
-            }
-            wp_safe_redirect( $redirect );
-            exit;
+            oe_przekieruj_z_komunikatem( $redirect, $egzamin_id, 'blad', 'Wypełnij wszystkie wymagane pola.', oe_dane_formularza( $pola_formularza ) );
         }
     }
 
     if ( empty($_POST['oe_zgoda_rodo']) ) {
-        $_SESSION['oe_blad_' . $egzamin_id] = 'Wymagana jest zgoda na przetwarzanie danych osobowych.';
-        foreach ( $pola_formularza as $p ) {
-            if ( isset($_POST[$p]) ) $_SESSION['oe_dane_' . $egzamin_id][$p] = $_POST[$p];
-        }
-        wp_safe_redirect( $redirect );
-        exit;
+        oe_przekieruj_z_komunikatem( $redirect, $egzamin_id, 'blad', 'Wymagana jest zgoda na przetwarzanie danych osobowych.', oe_dane_formularza( $pola_formularza ) );
     }
 
     // ── Sanityzacja danych ────────────────────────────────────────────────
@@ -61,22 +92,12 @@ function oe_obsluga_formularza() {
 
     // ── Walidacja e-mail ──────────────────────────────────────────────────
     if ( ! is_email($email) ) {
-        $_SESSION['oe_blad_' . $egzamin_id] = 'Nieprawidłowy adres e-mail.';
-        foreach ( $pola_formularza as $p ) {
-            if ( isset($_POST[$p]) ) $_SESSION['oe_dane_' . $egzamin_id][$p] = $_POST[$p];
-        }
-        wp_safe_redirect( $redirect );
-        exit;
+        oe_przekieruj_z_komunikatem( $redirect, $egzamin_id, 'blad', 'Nieprawidłowy adres e-mail.', oe_dane_formularza( $pola_formularza ) );
     }
 
     // ── Walidacja kodu pocztowego ─────────────────────────────────────────
     if ( ! preg_match('/^\d{2}-\d{3}$/', $kod) ) {
-        $_SESSION['oe_blad_' . $egzamin_id] = 'Nieprawidłowy format kodu pocztowego (00-000).';
-        foreach ( $pola_formularza as $p ) {
-            if ( isset($_POST[$p]) ) $_SESSION['oe_dane_' . $egzamin_id][$p] = $_POST[$p];
-        }
-        wp_safe_redirect( $redirect );
-        exit;
+        oe_przekieruj_z_komunikatem( $redirect, $egzamin_id, 'blad', 'Nieprawidłowy format kodu pocztowego (00-000).', oe_dane_formularza( $pola_formularza ) );
     }
 
     // ── Duplikat: sprawdź czy ten e-mail już jest na tym egzaminie ────────
@@ -91,12 +112,7 @@ function oe_obsluga_formularza() {
         'fields'      => 'ids',
     ]);
     if ( $duplikat->have_posts() ) {
-        $_SESSION['oe_blad_' . $egzamin_id] = 'Ten adres e-mail jest już zarejestrowany na ten egzamin.';
-        foreach ( $pola_formularza as $p ) {
-            if ( isset($_POST[$p]) ) $_SESSION['oe_dane_' . $egzamin_id][$p] = $_POST[$p];
-        }
-        wp_safe_redirect( $redirect );
-        exit;
+        oe_przekieruj_z_komunikatem( $redirect, $egzamin_id, 'blad', 'Ten adres e-mail jest już zarejestrowany na ten egzamin.', oe_dane_formularza( $pola_formularza ) );
     }
 
     // ── Sprawdź limit miejsc ──────────────────────────────────────────────
@@ -110,9 +126,7 @@ function oe_obsluga_formularza() {
             'fields'      => 'ids',
         ]);
         if ( $zajete->found_posts >= $limit ) {
-            $_SESSION['oe_blad_' . $egzamin_id] = 'Brak wolnych miejsc na ten egzamin.';
-            wp_safe_redirect( $redirect );
-            exit;
+            oe_przekieruj_z_komunikatem( $redirect, $egzamin_id, 'blad', 'Brak wolnych miejsc na ten egzamin.' );
         }
     }
 
@@ -129,9 +143,7 @@ function oe_obsluga_formularza() {
     $zapis_id = wp_insert_post( $post_data, true );
 
     if ( is_wp_error($zapis_id) ) {
-        $_SESSION['oe_blad_' . $egzamin_id] = 'Błąd systemu. Spróbuj ponownie za chwilę.';
-        wp_safe_redirect( $redirect );
-        exit;
+        oe_przekieruj_z_komunikatem( $redirect, $egzamin_id, 'blad', 'Błąd systemu. Spróbuj ponownie za chwilę.' );
     }
 
     // ── Zapisz meta ───────────────────────────────────────────────────────
@@ -160,11 +172,8 @@ function oe_obsluga_formularza() {
 
     // ── Sukces ────────────────────────────────────────────────────────────
     $nr_egz = get_post_meta($egzamin_id, '_oe_nr_egzaminu', true);
-    $_SESSION['oe_sukces_' . $egzamin_id] =
+    oe_przekieruj_z_komunikatem( $redirect, $egzamin_id, 'sukces',
         "<strong>Zapis przyjęty!</strong> Twoje zgłoszenie na egzamin <strong>{$nr_egz}</strong> zostało zarejestrowane. "
         . "Na podany adres e-mail wysłaliśmy potwierdzenie z danymi do przelewu opłaty egzaminacyjnej. "
-        . "Po zaksięgowaniu wpłaty otrzymasz potwierdzenie zatwierdzenia miejsca.";
-
-    wp_safe_redirect( $redirect );
-    exit;
+        . "Po zaksięgowaniu wpłaty otrzymasz potwierdzenie zatwierdzenia miejsca." );
 }

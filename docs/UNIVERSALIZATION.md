@@ -50,5 +50,4 @@ Counts are from the audit on 2026-10-02. Values are intentionally not repeated h
 
 - Reordering tasks or sections in an exam type changes the deterministic draw for every participant of that type, including documents regenerated for past exams.
 - The ministry paperwork layouts and legal citations are specific to Polish sailing licenses. Another country or sport needs different wording, so legal text must come from templates or settings, not code.
-- The signup form shortcode calls `session_start()` while the page is already being output. It only works on hosts with `output_buffering` enabled. Replace the session with a query arg or a transient.
 - Hosting is PHP 7.4 now and the newest PHP later. Decision (K, 2026-10-02): support both, so keep 7.4 syntax and avoid anything deprecated in PHP 8. `bin/check.php` lints on 7.4 and the newest 8.x.

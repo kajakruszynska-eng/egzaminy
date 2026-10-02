@@ -44,23 +44,20 @@ function oe_shortcode_formularz( $atts ) {
         $wolne = $limit - $zatwierdzone->found_posts;
     }
 
-    // Obsługa success/error z sesji
+    // Success/error message and form data after redirect (?oe_msg=<token>, see form-handler.php)
     $msg_sukces = '';
     $msg_blad   = '';
-    if ( session_status() === PHP_SESSION_NONE ) session_start();
-    if ( ! empty($_SESSION['oe_sukces_' . $egzamin_id]) ) {
-        $msg_sukces = $_SESSION['oe_sukces_' . $egzamin_id];
-        unset($_SESSION['oe_sukces_' . $egzamin_id]);
-    }
-    if ( ! empty($_SESSION['oe_blad_' . $egzamin_id]) ) {
-        $msg_blad = $_SESSION['oe_blad_' . $egzamin_id];
-        unset($_SESSION['oe_blad_' . $egzamin_id]);
-    }
-    // Przywróć dane formularza po błędzie
-    $prev = array();
-    if ( ! empty($_SESSION['oe_dane_' . $egzamin_id]) ) {
-        $prev = $_SESSION['oe_dane_' . $egzamin_id];
-        unset($_SESSION['oe_dane_' . $egzamin_id]);
+    $prev       = array();
+    $komunikat  = oe_pobierz_komunikat( $egzamin_id );
+    if ( $komunikat ) {
+        if ( $komunikat['typ'] === 'sukces' ) {
+            $msg_sukces = (string) $komunikat['tresc'];
+        } else {
+            $msg_blad = (string) $komunikat['tresc'];
+        }
+        if ( ! empty( $komunikat['dane'] ) && is_array( $komunikat['dane'] ) ) {
+            $prev = $komunikat['dane'];
+        }
     }
 
     $data_fmt = $data ? date_i18n('d.m.Y', strtotime($data)) : '';
