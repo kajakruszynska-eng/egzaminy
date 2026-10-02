@@ -7,7 +7,7 @@ add_action( 'add_meta_boxes', function() {
         'Dane egzaminu',
         'oe_metabox_egzamin',
         'oe_egzamin',
-        'normal',
+        'oe_po_tytule', // rendered right below the title, above the content editor
         'high'
     );
     add_meta_box(
@@ -26,6 +26,14 @@ add_action( 'add_meta_boxes', function() {
         'normal',
         'high'
     );
+} );
+
+// The exam data box sits under the title, so it is the first thing on the screen.
+add_action( 'edit_form_after_title', function( $post ) {
+    if ( $post->post_type !== 'oe_egzamin' ) return;
+    echo '<div style="margin-top:16px">';
+    do_meta_boxes( get_current_screen(), 'oe_po_tytule', $post );
+    echo '</div>';
 } );
 
 // ── Metabox: dane egzaminu ────────────────────────────────────────────────
