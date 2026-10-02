@@ -56,7 +56,7 @@ function oe_szablon_znaczniki() {
             'komisja'            => 'skład komisji, jedna osoba w linii (imię i nazwisko - funkcja)',
             'przewodniczacy'     => 'imię i nazwisko przewodniczącego',
             'sekretarz'          => 'imię i nazwisko sekretarza',
-            'osoba_podpisujaca'  => 'osoba podpisująca zgłoszenie',
+            'osoba_podpisujaca'  => 'osoba uprawniona do zgłaszania egzaminu (z ustawień; puste: druga osoba z komisji)',
         ),
         'Organizacja' => array(
             'org_nazwa'          => 'pełna nazwa',

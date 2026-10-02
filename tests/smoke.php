@@ -738,6 +738,16 @@ oe_metabox_generuj( get_post( $eid ) );
 $html = ob_get_clean();
 t_ok( strpos( $html, '0 Lista uczestników' ) !== false && strpos( $html, 'typ=lista' ) < strpos( $html, 'typ=zgloszenie' ), '0 lista is the first document in the generate box' );
 
+// Exam report signatory: setting, falling back to the second commission member.
+list( $f, ) = t_generate( 'zgloszenie', $eid, $tmpdir . '/k-zgl-1.docx' );
+t_ok( $f && strpos( t_docx_text( $f ), "Anna Test\n" ) !== false, 'zgloszenie without setting: signed by the second commission member' );
+$set = get_option( 'oe_settings' );
+update_option( 'oe_settings', array_merge( $set, array( 'zgloszenie_osoba' => 'Maria Uprawniona' ) ) );
+list( $f, ) = t_generate( 'zgloszenie', $eid, $tmpdir . '/k-zgl-2.docx' );
+$txt = $f ? t_docx_text( $f ) : '';
+t_ok( strpos( $txt, 'Maria Uprawniona' ) !== false && strpos( $txt, "Anna Test\n\n(imię i nazwisko osoby upoważnionej" ) === false, 'zgloszenie: signed by the person from settings' );
+update_option( 'oe_settings', $set );
+
 // E-mail: transfer title in red, bold and underlined.
 $GLOBALS['oe_t_mail'] = array();
 oe_wyslij_email_potwierdzenie( $zid );

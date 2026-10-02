@@ -156,7 +156,8 @@ function oe_get_eg($id) {
         'nr_konta'           => get_post_meta($id,'_oe_nr_konta',true),
         'wlasciciel_konta'   => get_post_meta($id,'_oe_wlasciciel_konta',true),
         'komisja'            => is_array($kom) ? $kom : array(),
-        'osoba_podpisujaca'  => (is_array($kom) && !empty($kom)) ? (isset($kom[1]['imie']) ? $kom[1]['imie'] : (isset($kom[0]['imie']) ? $kom[0]['imie'] : '')) : '',
+        // Person authorised to report exams (settings); fallback: second commission member, as before.
+        'osoba_podpisujaca'  => oe_setting('zgloszenie_osoba') !== '' ? oe_setting('zgloszenie_osoba') : ((is_array($kom) && !empty($kom)) ? (isset($kom[1]['imie']) ? $kom[1]['imie'] : (isset($kom[0]['imie']) ? $kom[0]['imie'] : '')) : ''),
     );
 }
 
