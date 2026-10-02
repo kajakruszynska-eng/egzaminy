@@ -381,6 +381,30 @@ function oe_rodzaj_synchronizuj_nazwe( $rid ) {
     }
 }
 
+/**
+ * Create the standard exam types once, on a site that has no exam types at all
+ * (none in any status, so deleted ones are not recreated). Existing exams are
+ * then linked to them by name. Returns the number of types created.
+ */
+function oe_utworz_rodzaje_standardowe() {
+    if ( get_option( 'oe_rodzaje_standardowe' ) ) return 0;
+    update_option( 'oe_rodzaje_standardowe', 1 );
+    $istniejace = get_posts( array( 'post_type' => 'oe_rodzaj', 'post_status' => 'any', 'numberposts' => 1, 'fields' => 'ids' ) );
+    if ( $istniejace ) return 0;
+    $n = 0;
+    $GLOBALS['oe_import_trwa'] = true;
+    foreach ( oe_rodzaje_standardowe() as $raw ) {
+        if ( oe_rodzaj_import( $raw ) ) $n++;
+    }
+    $GLOBALS['oe_import_trwa'] = false;
+    oe_rodzaje_all( true );
+    oe_migruj_rodzaje_egzaminow();
+    return $n;
+}
+
+// Activation does not run when a zip replaces an older version, so also check on admin load.
+add_action( 'admin_init', 'oe_utworz_rodzaje_standardowe', 5 );
+
 // ── Edit screen ───────────────────────────────────────────────────────────
 
 add_action( 'add_meta_boxes_oe_rodzaj', function() {
@@ -528,6 +552,13 @@ add_action( 'admin_notices', function() {
     if ( ! oe_rodzaje_all() ) {
         echo '<div class="notice notice-warning"><p><strong>Egzaminy:</strong> brak typów egzaminów. Dodaj je w Egzaminy &gt; Typy egzaminów albo zaimportuj plik w <a href="' . esc_url( $url ) . '">ustawieniach</a>.</p></div>';
         return;
+    }
+    $bez_decyzji = array();
+    foreach ( oe_rodzaje_all() as $t ) {
+        if ( $t['nr_decyzji'] === '' ) $bez_decyzji[] = $t['nazwa'];
+    }
+    if ( $bez_decyzji ) {
+        echo '<div class="notice notice-info"><p><strong>Egzaminy:</strong> typy bez numeru decyzji: ' . esc_html( implode( ', ', $bez_decyzji ) ) . '. Uzupełnij je w Egzaminy &gt; Typy egzaminów (razem z miejscami i kluczem odpowiedzi) albo zaimportuj plik z danymi organizacji w <a href="' . esc_url( $url ) . '">ustawieniach</a>.</p></div>';
     }
     $n = (int) get_option( 'oe_rodzaje_niedopasowane', 0 );
     if ( $n > 0 ) {

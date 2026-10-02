@@ -160,7 +160,37 @@ foreach ( get_posts( array( 'post_type' => array( 'oe_egzamin', 'oe_zapis', 'oe_
 }
 delete_option( 'oe_settings' );
 delete_option( 'oe_rodzaje_niedopasowane' );
+delete_option( 'oe_rodzaje_standardowe' );
 oe_rodzaje_all( true );
+
+// ── Standard types on a fresh site ──────────────────────────────────────
+echo "[standard types]\n";
+$e_std = wp_insert_post( array( 'post_type' => 'oe_egzamin', 'post_status' => 'publish', 'post_title' => 'Przed typami' ) );
+update_post_meta( $e_std, '_oe_rodzaj_egzaminu', 'Żeglarz Jachtowy' );
+t_ok( oe_utworz_rodzaje_standardowe() === 5 && count( oe_rodzaje_all( true ) ) === 5, 'five standard types created when the site has none' );
+$std_zj = oe_egzamin_rodzaj( $e_std );
+t_ok( $std_zj && $std_zj['skrot'] === 'ZJ' && (int) get_post_meta( $e_std, '_oe_rodzaj_id', true ) === $std_zj['id'], 'existing exam linked to its standard type' );
+$seed_std = json_decode( file_get_contents( $root . '/seed/ocean-wiedzy.json' ), true );
+$same = true;
+foreach ( $seed_std['rodzaje'] as $raw ) {
+    $t = oe_rodzaj_get( oe_rodzaj_find_by_label( $raw['nazwa'] ) );
+    $n = oe_rodzaj_normalize( $raw );
+    foreach ( array( 'skrot', 'sekcje', 'karta_wiersze', 'zgoda_rodzicow', 'liczba_pytan' ) as $k ) {
+        if ( $t[ $k ] !== $n[ $k ] ) $same = false;
+    }
+    if ( $t['nr_decyzji'] !== '' || $t['miejsca_teoria'] || $t['klucz'] !== '' ) $same = false;
+}
+t_ok( $same, 'standard types match the seed tasks and carry no organization data' );
+t_ok( oe_utworz_rodzaje_standardowe() === 0, 'standard types are created only once' );
+foreach ( get_posts( array( 'post_type' => array( 'oe_rodzaj', 'oe_egzamin' ), 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids' ) ) as $pid ) wp_delete_post( $pid, true );
+delete_option( 'oe_rodzaje_standardowe' );
+$t_one = wp_insert_post( array( 'post_type' => 'oe_rodzaj', 'post_status' => 'draft', 'post_title' => 'Własny' ) );
+t_ok( oe_utworz_rodzaje_standardowe() === 0, 'no standard types when the site already has a type' );
+wp_delete_post( $t_one, true );
+oe_rodzaje_all( true );
+// The rest of the test starts without types and imports them from the seed.
+update_option( 'oe_rodzaje_standardowe', 1 );
+t_issues();
 delete_option( 'oe_caps_version' );
 foreach ( wp_roles()->role_objects as $role ) {
     $role->remove_cap( 'oe_manage_exams' );

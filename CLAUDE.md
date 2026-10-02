@@ -47,6 +47,7 @@ ocean-egzaminy/              plugin root
     assets.php               front-end CSS/JS loading
     hide-meta.php            hides theme meta on exam posts
     rodzaje.php              CPT oe_rodzaj (exam types: code, decision, venues, card rows, task sections, answer key), migration, deterministic task drawing
+    rodzaje-standardowe.php  the five standard types (ministry tasks, no organization data), created automatically on a site with no types
     szablony.php             per-type document settings (built-in / template / off, extra template documents), DOCX template engine, sample template
     docx-builder.php         OE_Docx class, DOCX via ZipArchive
     generator.php            9 DOCX documents and the download handler
