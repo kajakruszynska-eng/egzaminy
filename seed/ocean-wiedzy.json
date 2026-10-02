@@ -1,6 +1,6 @@
 {
     "plugin": "ocean-egzaminy",
-    "version": "1.2.0",
+    "version": "1.4.0",
     "settings": {
         "org_nazwa_pelna": "Fundacja propagowania sportów wodnych dla każdego Ocean Wiedzy",
         "org_nazwa_krotka": "Fundacja Ocean Wiedzy",
@@ -107,7 +107,7 @@
                     "zadania": [
                         {
                             "nazwa": "kierowanie załogą",
-                            "zawsze_poz": true,
+                            "zawsze_poz": false,
                             "zawsze_nie": false
                         },
                         {
@@ -127,7 +127,7 @@
                         },
                         {
                             "nazwa": "praca w charakterze członka załogi",
-                            "zawsze_poz": false,
+                            "zawsze_poz": true,
                             "zawsze_nie": false
                         },
                         {
@@ -139,7 +139,8 @@
                 }
             ],
             "liczba_pytan": 75,
-            "klucz": "CACBCABBACCBCCABACBCAAACABBCAAACBBCAACACBAABBBCBBBAAACCCBBBACBACBBCCABBACBC"
+            "klucz": "CACBCABBACCBCCABACBCAAACABBCAAACBBCAACACBAABBBCBBBAAACCCBBBACBACBBCCABBACBC",
+            "nawigacja": false
         },
         {
             "nazwa": "Żeglarz Jachtowy",
@@ -298,7 +299,8 @@
                 }
             ],
             "liczba_pytan": 75,
-            "klucz": "BBCBAABABCBBCAABCBBAACCACACBCCCACAAABBACABAABCBBAACABCAAABACCAAABACBCABACBB"
+            "klucz": "BBCBAABABCBBCAABCBBAACCACACBCCCACAAABBACABAABCBBAACABCAAABACCAAABACBCABACBB",
+            "nawigacja": false
         },
         {
             "nazwa": "Jachtowy Sternik Morski",
@@ -395,11 +397,6 @@
                             "zawsze_nie": true
                         },
                         {
-                            "nazwa": "alarm człowiek za burtą",
-                            "zawsze_poz": false,
-                            "zawsze_nie": false
-                        },
-                        {
                             "nazwa": "dobór żagli / trym",
                             "zawsze_poz": false,
                             "zawsze_nie": false
@@ -447,7 +444,8 @@
                 }
             ],
             "liczba_pytan": 75,
-            "klucz": "CCCABBBCBBACBCCCCCCBBCCCCCAAACCCCCBCCBBCBCCBAAACCCCCCACACAAAACBCBBCCBACCCBC"
+            "klucz": "CCCABBBCBBACBCCCCCCBBCCCCCAAACCCCCBCCBBCBCCBAAACCCCCCACACAAAACBCBBCCBACCCBC",
+            "nawigacja": true
         },
         {
             "nazwa": "Motorowodny Sternik Morski",
@@ -559,11 +557,12 @@
                 }
             ],
             "liczba_pytan": 75,
-            "klucz": "ACBBCCABBCCABAABACABACBCBBCCABABBBCACBCBBBCCACBABCACCBACBABABABAACCBABBCBBC"
+            "klucz": "ACBBCCABBCCABAABACABACBCBBCCABABBBCACBCBBBCCACBABCACCBACBABABABAACCBABBCBBC",
+            "nawigacja": true
         },
         {
-            "nazwa": "Licencja do holowania narciarza wodnego lub innych obiektów",
-            "skrot": "LHN",
+            "nazwa": "Licencja do holowania narciarza wodnego lub innych obiektów pływających",
+            "skrot": "LDHN",
             "nr_decyzji": "DSW-ZKS.442.43.2022",
             "miejsca_teoria": [
                 "GDAŃSKI OŚRODEK SPORTU, ul. Żabi Kruk 15 A, 80-822 Gdańsk",
@@ -674,7 +673,8 @@
                 }
             ],
             "liczba_pytan": 25,
-            "klucz": "BCAACCCCBAAABBCBCCBCCCBBA"
+            "klucz": "BCAACCCCBAAABBCBCCBCCCBBA",
+            "nawigacja": false
         }
     ]
 }

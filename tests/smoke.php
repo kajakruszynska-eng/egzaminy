@@ -417,7 +417,7 @@ t_issues();
 // ── Decision numbers ────────────────────────────────────────────────────
 echo "[exam types]\n";
 $lhn = oe_rodzaj_find_by_label( 'Licencja do holowania narciarza' );
-t_ok( $lhn && oe_rodzaj_get( $lhn )['skrot'] === 'LHN', 'short legacy label resolves' );
+t_ok( $lhn && oe_rodzaj_get( $lhn )['skrot'] === 'LDHN', 'short legacy label resolves' );
 t_ok( oe_rodzaj_find_by_label( 'żeglarz jachtowy' ) === oe_rodzaj_find_by_label( 'Żeglarz Jachtowy' ), 'case-insensitive match' );
 t_ok( oe_rodzaj_find_by_label( '' ) === 0 && oe_rodzaj_find_by_label( 'Nieznany patent' ) === 0, 'empty or unknown label gives 0' );
 
@@ -662,6 +662,129 @@ wp_delete_attachment( $att_osoba, true );
 foreach ( $extra_z as $id ) wp_delete_post( $id, true );
 t_issues();
 
+// ── K's corrections of 2026-10-02 ───────────────────────────────────────
+echo "[corrections]\n";
+// Types saved before the corrections are fixed once on admin load.
+$stare = array(
+    array( 'nazwa' => 'Jachtowy Sternik Morski (stary)', 'skrot' => 'JSM', 'sekcje' => array( array( 'nazwa' => 'żagle', 'min' => 3, 'max' => 5, 'zadania' => array( array( 'nazwa' => 'człowiek za burtą' ), array( 'nazwa' => 'zwrot' ), array( 'nazwa' => 'alarm człowiek za burtą' ) ) ) ) ),
+    array( 'nazwa' => 'Sternik Motorowodny (stary)', 'skrot' => 'SM', 'sekcje' => array( array( 'nazwa' => 'silnik', 'min' => 3, 'max' => 3, 'zadania' => array( array( 'nazwa' => 'kierowanie załogą', 'zawsze_poz' => true ), array( 'nazwa' => 'człowiek za burtą' ), array( 'nazwa' => 'praca w charakterze członka załogi' ), array( 'nazwa' => 'prace bosmańskie', 'zawsze_poz' => true ) ) ) ) ),
+    array( 'nazwa' => 'Licencja do holowania narciarza wodnego lub innych obiektów', 'skrot' => 'LHN' ),
+);
+$stare_id = array();
+foreach ( $stare as $raw ) {
+    $id = wp_insert_post( array( 'post_type' => 'oe_rodzaj', 'post_status' => 'publish', 'post_title' => $raw['nazwa'] ) );
+    update_post_meta( $id, OE_RODZAJ_META, wp_slash( oe_rodzaj_normalize( $raw ) ) );
+    $stare_id[] = $id;
+}
+$e_hol = wp_insert_post( array( 'post_type' => 'oe_egzamin', 'post_status' => 'publish', 'post_title' => 'Holowanie' ) );
+update_post_meta( $e_hol, '_oe_rodzaj_id', $stare_id[2] );
+update_post_meta( $e_hol, '_oe_rodzaj_egzaminu', 'Licencja do holowania narciarza wodnego lub innych obiektów' );
+delete_option( 'oe_rodzaje_poprawki' );
+t_ok( oe_popraw_zapisane_rodzaje() >= 3, 'saved types corrected on admin load' );
+$j = oe_rodzaj_get( $stare_id[0] );
+$s = oe_rodzaj_get( $stare_id[1] );
+$h = oe_rodzaj_get( $stare_id[2] );
+t_ok( count( $j['sekcje'][0]['zadania'] ) === 2 && $j['nawigacja'], 'JSM: duplicate "alarm człowiek za burtą" removed, navigation task on' );
+t_ok( ! $s['sekcje'][0]['zadania'][0]['zawsze_poz'] && $s['sekcje'][0]['zadania'][2]['zawsze_poz'] && $s['sekcje'][0]['zadania'][3]['zawsze_poz'], 'SM: tasks 1-4 drawn, 5-6 always passed' );
+t_ok( $h['skrot'] === 'LDHN' && $h['nazwa'] === 'Licencja do holowania narciarza wodnego lub innych obiektów pływających', 'LHN renamed to LDHN with "pływających"' );
+t_ok( get_post_meta( $e_hol, '_oe_rodzaj_egzaminu', true ) === $h['nazwa'], 'exam keeps the renamed type name' );
+t_ok( oe_popraw_zapisane_rodzaje() === 0, 'corrections run once' );
+foreach ( $stare_id as $id ) wp_delete_post( $id, true );
+wp_delete_post( $e_hol, true );
+oe_rodzaje_all( true );
+$std = array();
+foreach ( oe_rodzaje_standardowe() as $w ) $std[ $w['skrot'] ] = $w;
+t_ok( isset( $std['LDHN'] ) && ! isset( $std['LHN'] ) && $std['JSM']['nawigacja'] && $std['MSM']['nawigacja'] && ! $std['SM']['nawigacja'], 'standard types carry the corrections' );
+
+// Documents: page numbers, underlined passed tasks, protocol attachments, participant list.
+list( $f, ) = t_generate( 'karty', $eid, $tmpdir . '/k-karty.docx' );
+$zip = new ZipArchive();
+$zip->open( $f );
+$kx  = $zip->getFromName( 'word/document.xml' );
+$ftr = (string) $zip->getFromName( 'word/footer1.xml' );
+$rel = (string) $zip->getFromName( 'word/_rels/document.xml.rels' );
+$zip->close();
+t_ok( strpos( $ftr, 'str. ' ) !== false && strpos( $ftr, ' PAGE ' ) !== false && strpos( $ftr, ' NUMPAGES ' ) !== false && strpos( $rel, 'footer1.xml' ) !== false && strpos( $kx, 'footerReference' ) !== false, 'documents have a "str. X z Y" footer' );
+$u0  = oe_get_uu( $eid )[0];
+$def = oe_rodzaj_def_losowania( oe_get_eg( $eid )['rodzaj'] );
+$poz = oe_losuj_zadania_v2( $u0, $def );
+$n_poz = 0;
+foreach ( $def['zadania'] as $idx => $z ) {
+    if ( empty( $z['zawsze_nie'] ) && ( ! empty( $z['zawsze_poz'] ) || in_array( $idx, $poz ) ) ) $n_poz++;
+}
+t_ok( $n_poz > 0 && substr_count( $kx, '<w:u w:val="single"/>' ) === $n_poz, "karty: the $n_poz passed tasks are underlined" );
+list( $f, ) = t_generate( 'protokol', $eid, $tmpdir . '/k-prot-sm.docx' );
+t_ok( $f && strpos( t_docx_text( $f ), 'zadanie nawigacyjne użyte' ) === false && strpos( t_docx_text( $f ), '– arkusz prawidłowych odpowiedzi' ) !== false, 'SM protocol: two attachments, no navigation task' );
+$e_jsm = wp_insert_post( array( 'post_type' => 'oe_egzamin', 'post_status' => 'publish', 'post_title' => 'JSM' ) );
+update_post_meta( $e_jsm, '_oe_rodzaj_egzaminu', 'Jachtowy Sternik Morski' );
+oe_migruj_rodzaje_egzaminow();
+list( $f, ) = t_generate( 'protokol', $e_jsm, $tmpdir . '/k-prot-jsm.docx' );
+$txt = $f ? preg_replace( '/\n+/', "\n", t_docx_text( $f ) ) : '';
+t_ok( strpos( $txt, "– listę pytań użytą do przeprowadzenia egzaminu,\n– arkusz prawidłowych odpowiedzi,\n– zadanie nawigacyjne użyte podczas egzaminu wraz z prawidłowymi odpowiedziami." ) !== false, 'JSM protocol lists the navigation task' . ( strpos( $txt, 'zadanie nawigacyjne użyte' ) === false ? ' (nawigacja=' . var_export( oe_egzamin_rodzaj( $e_jsm )['nawigacja'] ?? null, true ) . ', ' . substr( $txt, strpos( $txt, 'Do niniejszego' ), 200 ) . ')' : '' ) );
+wp_delete_post( $e_jsm, true );
+$zp = wp_insert_post( array( 'post_type' => 'oe_zapis', 'post_status' => 'oe_oczekuje', 'post_title' => 'Pending' ) );
+foreach ( array( '_oe_egzamin_id' => $eid, '_oe_imie' => 'Piotr', '_oe_nazwisko' => 'Oczekujący', '_oe_email' => 'piotr@example.test', '_oe_telefon' => '600 700 800', '_oe_kraj' => 'Niemcy', '_oe_znizka_mlodzi' => 1 ) as $k => $v ) update_post_meta( $zp, $k, $v );
+list( $f, ) = t_generate( 'lista', $eid, $tmpdir . '/k-lista.docx' );
+$txt = $f ? t_docx_text( $f ) : '';
+$zip = new ZipArchive();
+$zip->open( $f );
+$lx = $zip->getFromName( 'word/document.xml' );
+$zip->close();
+t_ok( strpos( $txt, 'ewa@example.test' ) !== false && strpos( $txt, '+48 500 000 000' ) !== false && strpos( $txt, 'piotr@example.test' ) !== false && strpos( $txt, 'Oczekuje na opłatę' ) !== false, '0 lista: all signups with e-mails, phones and status' );
+t_ok( strpos( $txt, 'Niemcy' ) !== false && strpos( $txt, 'ulga 50%' ) !== false && strpos( $txt, 'Zatwierdzeni: 1, oczekujący na opłatę: 1.' ) !== false && strpos( $lx, 'w:orient="landscape"' ) !== false, '0 lista: country, discount, totals, landscape' );
+wp_delete_post( $zp, true );
+ob_start();
+oe_metabox_generuj( get_post( $eid ) );
+$html = ob_get_clean();
+t_ok( strpos( $html, '0 Lista uczestników' ) !== false && strpos( $html, 'typ=lista' ) < strpos( $html, 'typ=zgloszenie' ), '0 lista is the first document in the generate box' );
+
+// E-mail: transfer title in red, bold and underlined.
+$GLOBALS['oe_t_mail'] = array();
+oe_wyslij_email_potwierdzenie( $zid );
+$msg = $GLOBALS['oe_t_mail'][0]['message'];
+t_ok( preg_match( '#color:\#c62828"><strong><u>W tytule przelewu koniecznie podaj:</u></strong><br>\s*<span[^>]*>&bdquo;Opłata za egzamin#u', $msg ) === 1 && strpos( $msg, '>Tytuł przelewu<' ) === false, 'e-mail: red, bold, underlined transfer title' );
+
+// Signups close when the exam starts.
+$e_t = wp_insert_post( array( 'post_type' => 'oe_egzamin', 'post_status' => 'publish', 'post_title' => 'Czas' ) );
+$teraz = new DateTime( 'now', wp_timezone() );
+update_post_meta( $e_t, '_oe_data_egzaminu', ( clone $teraz )->modify( '-1 day' )->format( 'Y-m-d' ) );
+t_ok( oe_zapisy_zamkniete( $e_t ), 'closed: exam yesterday' );
+update_post_meta( $e_t, '_oe_data_egzaminu', $teraz->format( 'Y-m-d' ) );
+update_post_meta( $e_t, '_oe_godzina', ( clone $teraz )->modify( '-5 minutes' )->format( 'H:i' ) );
+$minelo = ( clone $teraz )->modify( '-5 minutes' )->format( 'Y-m-d' ) === $teraz->format( 'Y-m-d' );
+t_ok( ! $minelo || oe_zapisy_zamkniete( $e_t ), 'closed: exam started 5 minutes ago' );
+update_post_meta( $e_t, '_oe_data_egzaminu', ( clone $teraz )->modify( '+1 day' )->format( 'Y-m-d' ) );
+update_post_meta( $e_t, '_oe_godzina', '10:00' );
+t_ok( ! oe_zapisy_zamkniete( $e_t ), 'open: exam tomorrow' );
+$set = get_option( 'oe_settings' );
+update_option( 'oe_settings', array_merge( $set, array( 'zapisy_zamkniecie_godz' => '48' ) ) );
+t_ok( oe_zapisy_zamkniete( $e_t ), 'closed: setting closes signups 48 hours before' );
+update_option( 'oe_settings', $set );
+update_post_meta( $e_t, '_oe_data_egzaminu', ( clone $teraz )->modify( '-1 day' )->format( 'Y-m-d' ) );
+$html = do_shortcode( '[formularz_egzaminu id="' . $e_t . '"]' );
+t_ok( strpos( $html, 'Zapisy zamknięte' ) !== false && strpos( $html, '<form' ) === false, 'closed exam: form replaced by a notice' );
+$loc = t_submit( wp_slash( array( 'oe_egzamin_id' => (string) $e_t, 'oe_redirect' => home_url( '/' ), 'oe_nonce' => wp_create_nonce( 'oe_zapis_' . $e_t ), 'oe_zgoda_rodo' => '1', 'oe_imie' => 'Jan', 'oe_nazwisko' => 'Spóźniony', 'oe_data_urodzenia' => '1990-01-01', 'oe_miejsce_urodzenia' => 'Bytom', 'oe_ulica' => 'ul. A 1', 'oe_kod' => '41-900', 'oe_miasto' => 'Bytom', 'oe_email' => 'spoznialski@example.test', 'oe_telefon' => '500 100 200' ) ) );
+t_ok( count( get_posts( array( 'post_type' => 'oe_zapis', 'post_status' => 'any', 'meta_key' => '_oe_egzamin_id', 'meta_value' => $e_t, 'fields' => 'ids' ) ) ) === 0, 'closed exam: late signup refused' );
+$html = do_shortcode( '[lista_egzaminow pokaz_minione="tak"]' );
+t_ok( strpos( $html, 'Zapisy zamknięte' ) !== false, 'exam list shows "Zapisy zamknięte"' );
+
+// Admin list sorted by exam date, newest first, exams without a date kept.
+$e_bez = wp_insert_post( array( 'post_type' => 'oe_egzamin', 'post_status' => 'publish', 'post_title' => 'Bez daty' ) );
+$q = new WP_Query();
+$prev_main = $GLOBALS['wp_the_query'];
+$GLOBALS['wp_the_query'] = $q;
+$ids = $q->query( array( 'post_type' => 'oe_egzamin', 'post_status' => 'publish', 'posts_per_page' => -1, 'fields' => 'ids' ) );
+$GLOBALS['wp_the_query'] = $prev_main;
+$daty = array();
+foreach ( $ids as $id ) $daty[] = (string) get_post_meta( $id, '_oe_data_egzaminu', true );
+$z_data = array_values( array_filter( $daty ) );
+$sorted = $z_data;
+rsort( $sorted );
+t_ok( in_array( $e_bez, $ids ) && $z_data === $sorted && count( $z_data ) >= 2, 'admin exam list: by exam date, newest first, undated kept' );
+wp_delete_post( $e_t, true );
+wp_delete_post( $e_bez, true );
+t_issues();
+
 // ── Exam without approved participants ──────────────────────────────────
 echo "[no approved participants]\n";
 $e0 = wp_insert_post( array( 'post_type' => 'oe_egzamin', 'post_status' => 'publish', 'post_title' => 'Pusty' ) );
@@ -683,7 +806,7 @@ $html = ob_get_clean();
 preg_match( '/var oeZadania = (\{.*?\});\n/', $html, $mz );
 $podglad = isset( $mz[1] ) ? json_decode( $mz[1], true ) : array();
 $sm_lista = isset( $podglad[ $sm['id'] ] ) ? $podglad[ $sm['id'] ][0]['zadania'] : array();
-t_ok( strpos( $html, 'oe-zadania-podglad' ) !== false && in_array( 'kierowanie załogą (zawsze zaliczone)', $sm_lista, true ), 'exam screen previews the practical tasks of its type' );
+t_ok( strpos( $html, 'oe-zadania-podglad' ) !== false && in_array( 'kierowanie załogą', $sm_lista, true ) && in_array( 'praca w charakterze członka załogi (zawsze zaliczone)', $sm_lista, true ), 'exam screen previews the practical tasks of its type' );
 wp_delete_post( $z0, true );
 wp_delete_post( $e0, true );
 t_issues();

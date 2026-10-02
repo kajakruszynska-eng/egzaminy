@@ -55,6 +55,28 @@ add_action( 'manage_oe_egzamin_posts_custom_column', function( $col, $post_id ) 
     }
 }, 10, 2 );
 
+// ── Sortowanie listy egzaminów po dacie egzaminu ──────────────────────────
+
+add_filter( 'manage_edit-oe_egzamin_sortable_columns', function( $cols ) {
+    $cols['data_egz'] = 'data_egz';
+    return $cols;
+} );
+
+// Default order: exam date, newest first. Exams without a date are kept (named
+// meta_query clauses with EXISTS / NOT EXISTS instead of meta_key, which would hide them).
+add_action( 'pre_get_posts', function( $query ) {
+    if ( ! is_admin() || ! $query->is_main_query() || $query->get( 'post_type' ) !== 'oe_egzamin' ) return;
+    $orderby = $query->get( 'orderby' );
+    if ( $orderby && $orderby !== 'data_egz' ) return;
+    $query->set( 'meta_query', array(
+        'relation'  => 'OR',
+        'data_egz'  => array( 'key' => '_oe_data_egzaminu', 'compare' => 'EXISTS' ),
+        'brak_daty' => array( 'key' => '_oe_data_egzaminu', 'compare' => 'NOT EXISTS' ),
+    ) );
+    $order = strtoupper( (string) $query->get( 'order' ) ) === 'ASC' ? 'ASC' : 'DESC';
+    $query->set( 'orderby', array( 'data_egz' => $order, 'date' => $order ) );
+} );
+
 // ── Kolumny listy: Zapisy ─────────────────────────────────────────────────
 
 add_filter( 'manage_oe_zapis_posts_columns', function( $cols ) {

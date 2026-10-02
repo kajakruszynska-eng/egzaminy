@@ -21,6 +21,7 @@ define( 'OE_W_NS', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main
 /** Standard documents: key => label. Keys are used in URLs and file names. */
 function oe_dokumenty_wbudowane() {
     return array(
+        'lista'         => '0 Lista uczestników',
         'zgloszenie'    => 'Zgłoszenie egzaminu',
         'protokol'      => 'Protokół KE',
         'zal1'          => 'Zał. nr 1 - wyniki',

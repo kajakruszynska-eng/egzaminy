@@ -55,6 +55,7 @@ function oe_settings_fields() {
             'title'  => 'Dokumenty i zgody',
             'fields' => array(
                 'dok_miasto'       => array( 'Miejscowość wystawienia dokumentów', 'text', 'Puste: miejscowość organizacji.' ),
+                'zapisy_zamkniecie_godz' => array( 'Zamknij zapisy (godzin przed egzaminem)', 'number', 'Zapisy zamykają się zawsze najpóźniej o godzinie rozpoczęcia egzaminu (bez godziny: o północy w dniu egzaminu). Np. 24 zamyka je dobę wcześniej. Puste lub 0: przy rozpoczęciu.' ),
                 'zgoda_formularz'  => array( 'Treść zgody w formularzu zapisu', 'textarea', '{nazwa} zostanie zastąpione nazwą skróconą organizacji.' ),
             ),
         ),

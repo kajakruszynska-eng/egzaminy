@@ -48,6 +48,7 @@ ocean-egzaminy/              plugin root
     hide-meta.php            hides theme meta on exam posts
     rodzaje.php              CPT oe_rodzaj (exam types: code, decision, venues, card rows, task sections, answer key), migration, deterministic task drawing
     rodzaje-standardowe.php  the five standard types (ministry tasks, no organization data), created automatically on a site with no types
+    rodzaje-poprawki.php     K's corrections of 2026-10-02 to the standard types (JSM duplicate task, SM draw rules, LDHN code and name, navigation task); applied once to saved types
     szablony.php             per-type document settings (built-in / template / off, extra template documents), DOCX template engine, sample template
     docx-builder.php         OE_Docx class, DOCX via ZipArchive
     generator.php            9 DOCX documents and the download handler
@@ -61,6 +62,8 @@ Organization data never goes in code: read it with `oe_setting( 'key' )` or a he
 ## Domain notes
 
 - Exam types are data (Egzaminy > Typy egzaminów). K's organization uses five: Sternik Motorowodny (SM), Zeglarz Jachtowy (ZJ), Jachtowy Sternik Morski (JSM), Motorowodny Sternik Morski (MSM), Licencja do holowania narciarza wodnego lub innych obiektow (LHN), all in `seed/ocean-wiedzy.json`. Each has a ministry decision number (decyzja MSiT), its own venue lists and its own task sets.
+- "0 Lista uczestników" (key `lista`): every current signup (approved and awaiting payment) with e-mail, phone and status, landscape. All built-in documents have a "str. X z Y" footer (PAGE/NUMPAGES fields, `OE_Docx::setNumeracja()`); karty underline the tasks a person passes (same rule as "poz." in zał. 2).
+- Signups close at the exam start (date and time in the site time zone, midnight without a time), earlier by the `zapisy_zamkniecie_godz` setting; `oe_zapisy_zamkniete()` in shortcode.php. The admin exam list is ordered by exam date, newest first.
 - Nine standard documents per exam: zgloszenie, karty, arkusze, arkusz_wzor1, zaswiadczenia, zal1, zal2, zal3, protokol. Generated from approved participants only (status `oe_zatwierdzony`); karty, zaswiadczenia, arkusze and per-participant templates have one page per approved person, so without any the generate box disables them and the handler shows a message instead of an empty file. Each exam type sets every document to the built-in layout (generator.php, Polish standard forms), its own DOCX template, or off, and can add extra template documents (decision K, 2026-10-02: route b).
 - Template placeholders are `{name}`; the full list is `oe_szablon_znaczniki()` in `szablony.php`, shown in the type editor and in the downloadable sample template. A table row with `{u.*}` repeats per participant, with `{k.*}` per commission member; "one copy per participant" repeats the whole body. When adding a placeholder, add it to both `oe_szablon_znaczniki()` and the value functions.
 - Built-in layouts must stay byte-identical unless a change is intended: compare generated `word/document.xml` before and after (see docs/TESTING.md).

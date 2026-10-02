@@ -14,6 +14,7 @@ function oe_metabox_generuj( $post ) {
         return;
     }
     $ikony = array(
+        'lista'         => '👥',
         'zgloszenie'    => '📋',
         'protokol'      => '📄',
         'zal1'          => '📊',
@@ -80,6 +81,7 @@ function oe_handle_generuj_docx() {
     $nr_s   = preg_replace('/[^a-zA-Z0-9_-]/', '_', $eg['nr_egzaminu'] ?? 'egzamin');
 
     $fn_map = array(
+        'lista'         => "{$prefix}_0_lista_uczestnikow.docx",
         'zgloszenie'    => "{$prefix}.docx",
         'protokol'      => "{$prefix}_protokol_KE.docx",
         'zal1'          => "{$prefix}_zal1_wyniki.docx",
@@ -116,7 +118,8 @@ function oe_handle_generuj_docx() {
 
     $fn = isset($fn_map[$typ]) ? $fn_map[$typ] : "{$prefix}_{$typ}.docx";
 
-    if      ($typ==='zgloszenie')    oe_doc_zgloszenie($eg,$fn);
+    if      ($typ==='lista')         oe_doc_lista($eg,$eid,$fn);
+    elseif  ($typ==='zgloszenie')    oe_doc_zgloszenie($eg,$fn);
     elseif  ($typ==='protokol')      oe_doc_protokol($eg,$uu,$fn);
     elseif  ($typ==='zal1')          oe_doc_zal1($eg,$uu,$fn);
     elseif  ($typ==='zal2')          oe_doc_zal2($eg,$uu,$fn);
@@ -322,6 +325,68 @@ function oe_doc_zgloszenie($eg,$fn) {
     $d->download($fn);
 }
 
+// ── 0 LISTA UCZESTNIKÓW ───────────────────────────────────────────────────
+
+/** All current signups (approved and awaiting payment) with every field, for the organizer. */
+function oe_doc_lista($eg, $eid, $fn) {
+    $zapisy = get_posts(array(
+        'post_type'      => 'oe_zapis',
+        'post_status'    => array('oe_zatwierdzony','oe_oczekuje'),
+        'meta_query'     => array(array('key'=>'_oe_egzamin_id','value'=>$eid)),
+        'posts_per_page' => -1,
+        'orderby'        => 'date',
+        'order'          => 'ASC',
+    ));
+    $statusy = oe_get_statusy();
+
+    $d = new OE_Docx();
+    $d->setLandscape(true);
+    oe_msd($d,$eg);
+    oe_hdr($d,$eg);
+    $d->pRuns(array(array('text'=>'Lista uczestników - egzamin nr '.$eg['nr_egzaminu'],'bold'=>true,'size'=>22)),array('after'=>60));
+    $d->p($eg['rodzaj_egzaminu'].', '.$eg['data_fmt'].($eg['godzina'] ? ', godz. '.$eg['godzina'] : '').', '.$eg['miejscowosc'],array('size'=>18,'after'=>160));
+
+    // Landscape A4 inner width: 16838 - 2 x 720
+    $cw = array(500,2300,2000,3000,2600,1700,1500,1798);
+    $h  = array('textOpts'=>array('bold'=>true,'size'=>16));
+    $rows = array(array(
+        OE_Docx::tc('Lp.',$cw[0],$h),
+        OE_Docx::tc('Imię i nazwisko',$cw[1],$h),
+        OE_Docx::tc('Data i miejsce ur.',$cw[2],$h),
+        OE_Docx::tc('Adres zamieszkania',$cw[3],$h),
+        OE_Docx::tc('E-mail',$cw[4],$h),
+        OE_Docx::tc('Telefon',$cw[5],$h),
+        OE_Docx::tc('Status',$cw[6],$h),
+        OE_Docx::tc('Uwagi',$cw[7],$h),
+    ));
+    $t = array('textOpts'=>array('size'=>16));
+    foreach ($zapisy as $i => $z) {
+        $m = function($k) use ($z) { return (string) get_post_meta($z->ID, $k, true); };
+        $kraj = $m('_oe_kraj');
+        $adres = $m('_oe_ulica').', '.$m('_oe_kod').' '.$m('_oe_miasto').(($kraj !== '' && $kraj !== 'Polska') ? ', '.$kraj : '');
+        $uwagi = array();
+        if ((int) $m('_oe_znizka_mlodzi')) $uwagi[] = 'ulga 50%';
+        $uwagi[] = 'zapis '.get_the_date('d.m.Y', $z->ID);
+        $st = get_post_status($z->ID);
+        $rows[] = array(
+            OE_Docx::tc(($i+1).'.',$cw[0],$t),
+            OE_Docx::tc($m('_oe_imie').' '.$m('_oe_nazwisko'),$cw[1],array('textOpts'=>array('size'=>16,'bold'=>true))),
+            OE_Docx::tc(oe_dfmt($m('_oe_data_urodzenia')).' '.$m('_oe_miejsce_urodzenia'),$cw[2],$t),
+            OE_Docx::tc($adres,$cw[3],$t),
+            OE_Docx::tc($m('_oe_email'),$cw[4],$t),
+            OE_Docx::tc($m('_oe_telefon'),$cw[5],$t),
+            OE_Docx::tc(isset($statusy[$st]) ? $statusy[$st]['label'] : $st,$cw[6],$t),
+            OE_Docx::tc(implode(', ',$uwagi),$cw[7],$t),
+        );
+    }
+    if (!$zapisy) {
+        $rows[] = array(OE_Docx::tc('Brak zapisów.',array_sum($cw),array('colSpan'=>count($cw),'textOpts'=>array('size'=>16,'italic'=>true))));
+    }
+    $d->table($rows,$cw);
+    $d->p('Zatwierdzeni: '.count(array_filter($zapisy,function($z){ return get_post_status($z->ID)==='oe_zatwierdzony'; })).', oczekujący na opłatę: '.count(array_filter($zapisy,function($z){ return get_post_status($z->ID)==='oe_oczekuje'; })).'.',array('size'=>16,'before'=>120));
+    $d->download($fn);
+}
+
 // ── PROTOKÓŁ ──────────────────────────────────────────────────────────────
 
 function oe_doc_protokol($eg,$uu,$fn) {
@@ -379,8 +444,14 @@ function oe_doc_protokol($eg,$uu,$fn) {
 
     $d->br();
     $d->p('Do niniejszego protokołu dołącza się:',array('after'=>80));
-    $d->p('– listę pytań użytą do przeprowadzenia egzaminu',array('after'=>60));
-    $d->p('– arkusz prawidłowych odpowiedzi',array('after'=>240));
+    if ($eg['rodzaj'] && $eg['rodzaj']['nawigacja']) {
+        $d->p('– listę pytań użytą do przeprowadzenia egzaminu,',array('after'=>60));
+        $d->p('– arkusz prawidłowych odpowiedzi,',array('after'=>60));
+        $d->p('– zadanie nawigacyjne użyte podczas egzaminu wraz z prawidłowymi odpowiedziami.',array('after'=>240));
+    } else {
+        $d->p('– listę pytań użytą do przeprowadzenia egzaminu',array('after'=>60));
+        $d->p('– arkusz prawidłowych odpowiedzi',array('after'=>240));
+    }
 
     $d->p('Zaświadczam prawidłowość przeprowadzenia niniejszego egzaminu',array('bold'=>true,'after'=>600));
     $d->p('............................................................................',array('align'=>'center','after'=>60));
@@ -627,8 +698,10 @@ function oe_doc_karty($eg, $uu, $fn) {
                 // Tabele z zadaniami praktycznymi
                 foreach ($zadania as $zi => $z) {
                     if ($z['sekcja'] !== $tab['sekcja']) continue;
+                    // Underline the tasks this person passes (the same ones marked "poz." in zał. nr 2).
+                    $zaliczone = empty($z['zawsze_nie']) && (!empty($z['zawsze_poz']) || in_array($zi, $poz_idx));
                     $rows[] = array(
-                        OE_Docx::tc($z['nazwa'], $cw[0], array('textOpts'=>array('size'=>15))),
+                        OE_Docx::tc($z['nazwa'], $cw[0], array('textOpts'=>array('size'=>15,'underline'=>$zaliczone))),
                         OE_Docx::tc('', $cw[1]),
                         OE_Docx::tc('', $cw[2]),
                     );

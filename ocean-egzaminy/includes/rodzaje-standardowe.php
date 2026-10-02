@@ -3,10 +3,10 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
  * The five standard Polish exam types with the practical tasks set by the
- * ministry (same as the first version of the plugin). Created automatically
- * when a site has no exam types. Organization-specific data (decision
- * numbers, venues, answer keys) is not here; it comes from the settings
- * import or is entered on the type screen.
+ * ministry, including the corrections in rodzaje-poprawki.php. Created
+ * automatically when a site has no exam types. Organization-specific data
+ * (decision numbers, venues, answer keys) is not here; it comes from the
+ * settings import or is entered on the type screen.
  *
  * Generated from seed/ocean-wiedzy.json; keep the task order, the
  * deterministic draw depends on it.
@@ -23,6 +23,7 @@ function oe_rodzaje_standardowe() {
       1 => 'praktyka',
     ),
     'zgoda_rodzicow' => true,
+    'nawigacja' => false,
     'sekcje' =>
     array(
       0 =>
@@ -35,7 +36,7 @@ function oe_rodzaje_standardowe() {
           0 =>
           array(
             'nazwa' => 'kierowanie załogą',
-            'zawsze_poz' => true,
+            'zawsze_poz' => false,
             'zawsze_nie' => false,
           ),
           1 =>
@@ -59,7 +60,7 @@ function oe_rodzaje_standardowe() {
           4 =>
           array(
             'nazwa' => 'praca w charakterze członka załogi',
-            'zawsze_poz' => false,
+            'zawsze_poz' => true,
             'zawsze_nie' => false,
           ),
           5 =>
@@ -83,6 +84,7 @@ function oe_rodzaje_standardowe() {
       1 => 'praktyka',
     ),
     'zgoda_rodzicow' => true,
+    'nawigacja' => false,
     'sekcje' =>
     array(
       0 =>
@@ -225,6 +227,7 @@ function oe_rodzaje_standardowe() {
       2 => 'praktyka',
     ),
     'zgoda_rodzicow' => false,
+    'nawigacja' => true,
     'sekcje' =>
     array(
       0 =>
@@ -278,17 +281,11 @@ function oe_rodzaje_standardowe() {
           ),
           7 =>
           array(
-            'nazwa' => 'alarm człowiek za burtą',
-            'zawsze_poz' => false,
-            'zawsze_nie' => false,
-          ),
-          8 =>
-          array(
             'nazwa' => 'dobór żagli / trym',
             'zawsze_poz' => false,
             'zawsze_nie' => false,
           ),
-          9 =>
+          8 =>
           array(
             'nazwa' => 'prowadzenie jachtu przy spotkaniu z inną jednostką / wyprzedzanie',
             'zawsze_poz' => false,
@@ -351,6 +348,7 @@ function oe_rodzaje_standardowe() {
       1 => 'praktyka',
     ),
     'zgoda_rodzicow' => false,
+    'nawigacja' => true,
     'sekcje' =>
     array(
       0 =>
@@ -403,14 +401,15 @@ function oe_rodzaje_standardowe() {
   ),
   4 =>
   array(
-    'nazwa' => 'Licencja do holowania narciarza wodnego lub innych obiektów',
-    'skrot' => 'LHN',
+    'nazwa' => 'Licencja do holowania narciarza wodnego lub innych obiektów pływających',
+    'skrot' => 'LDHN',
     'karta_wiersze' =>
     array(
       0 => 'test z teorii',
       1 => 'praktyka',
     ),
     'zgoda_rodzicow' => false,
+    'nawigacja' => false,
     'sekcje' =>
     array(
       0 =>

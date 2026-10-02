@@ -3,6 +3,28 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 add_shortcode( 'formularz_egzaminu', 'oe_shortcode_formularz' );
 
+/**
+ * True when signups for the exam are closed: from its start (date and time in
+ * the site's time zone; without a time, midnight of the exam day), minus the
+ * "zapisy_zamkniecie_godz" setting. Exams without a date stay open.
+ */
+function oe_zapisy_zamkniete( $egzamin_id ) {
+    $data = (string) get_post_meta( $egzamin_id, '_oe_data_egzaminu', true );
+    if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $data ) ) return false;
+    $godz = (string) get_post_meta( $egzamin_id, '_oe_godzina', true );
+    if ( ! preg_match( '/^\d{1,2}:\d{2}$/', $godz ) ) $godz = '00:00';
+    try {
+        $start = new DateTime( $data . ' ' . $godz, wp_timezone() );
+    } catch ( Exception $e ) {
+        return false;
+    }
+    $wczesniej = (float) oe_setting( 'zapisy_zamkniecie_godz' );
+    if ( $wczesniej > 0 ) {
+        $start->modify( '-' . (int) round( $wczesniej * 60 ) . ' minutes' );
+    }
+    return time() >= $start->getTimestamp();
+}
+
 function oe_prev( $prev, $key, $default = '' ) {
     return isset($prev[$key]) ? esc_attr(sanitize_text_field($prev[$key])) : esc_attr($default);
 }
@@ -41,6 +63,12 @@ function oe_shortcode_formularz( $atts ) {
         if ( ! empty( $komunikat['dane'] ) && is_array( $komunikat['dane'] ) ) {
             $prev = $komunikat['dane'];
         }
+    }
+
+    if ( ! $msg_sukces && oe_zapisy_zamkniete( $egzamin_id ) ) {
+        return '<div class="oe-formularz-info" style="padding:16px;background:#FFF3E0;border-left:4px solid #BA7517;border-radius:4px">'
+             . '<strong>Zapisy zamknięte.</strong> Zapisy na ten egzamin zostały zakończone. Skontaktuj się z organizatorem.'
+             . '</div>';
     }
 
     // Sprawdź limit miejsc. Checked after reading the message: the person who just
@@ -328,6 +356,7 @@ function oe_shortcode_lista( $atts ) {
             $wolne = max( 0, $limit - $zajete->found_posts );
             $pelny = ( $wolne === 0 );
         }
+        $zamkniete = oe_zapisy_zamkniete( $eid );
 
         // Format daty
         $dzien = $mies = $rok = '';
@@ -361,7 +390,9 @@ function oe_shortcode_lista( $atts ) {
             </div>
 
             <div class="oe-egz-prawa">
-                <?php if ( $limit > 0 ) : ?>
+                <?php if ( $zamkniete ) : ?>
+                    <span class="oe-badge oe-badge-pelny">Zapisy zamknięte</span>
+                <?php elseif ( $limit > 0 ) : ?>
                     <?php if ( $pelny ) : ?>
                         <span class="oe-badge oe-badge-pelny">Brak miejsc</span>
                     <?php else : ?>
@@ -371,8 +402,8 @@ function oe_shortcode_lista( $atts ) {
 
                 <?php if ( $url ) : ?>
                     <a href="<?php echo esc_url($url); ?>"
-                       class="oe-btn-zapisz<?php echo $pelny ? ' oe-btn-disabled' : ''; ?>"
-                       <?php echo $pelny ? 'aria-disabled="true"' : ''; ?>>
+                       class="oe-btn-zapisz<?php echo ( $pelny || $zamkniete ) ? ' oe-btn-disabled' : ''; ?>"
+                       <?php echo ( $pelny || $zamkniete ) ? 'aria-disabled="true"' : ''; ?>>
                         Zapisz się
                     </a>
                 <?php endif; ?>

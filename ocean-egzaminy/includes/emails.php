@@ -64,11 +64,10 @@ function oe_wyslij_email_potwierdzenie( $zapis_id ) {
         <?php endif; ?>
       </td>
     </tr>
-    <tr>
-      <td style="padding:6px 0;color:#555;vertical-align:top">Tytuł przelewu</td>
-      <td style="padding:6px 0;font-style:italic">&bdquo;<?php echo esc_html($tytul_prz); ?>&rdquo;</td>
-    </tr>
   </table>
+
+  <p style="margin:16px 0 0;font-size:14px;color:#c62828"><strong><u>W tytule przelewu koniecznie podaj:</u></strong><br>
+  <span style="font-weight:600">&bdquo;<?php echo esc_html($tytul_prz); ?>&rdquo;</span></p>
 
   <?php if ($blik_tel) : ?>
   <div style="margin-top:16px;padding-top:14px;border-top:1px solid #AED6F1">
@@ -77,7 +76,7 @@ function oe_wyslij_email_potwierdzenie( $zapis_id ) {
       <td style="padding-right:12px"><?php echo oe_email_blik_logo(28); ?></td>
       <td style="font-size:18px;font-weight:700;color:#1a5276"><?php echo esc_html($blik_tel); ?></td>
     </tr></table>
-    <p style="margin:8px 0 0;font-size:12px;color:#777">Kwota: <strong><?php echo esc_html($kwota_str); ?></strong> &nbsp;|&nbsp; Tytuł: <?php echo esc_html($tytul_prz); ?></p>
+    <p style="margin:8px 0 0;font-size:12px;color:#777">Kwota: <strong><?php echo esc_html($kwota_str); ?></strong> &nbsp;|&nbsp; <span style="color:#c62828"><strong><u>Tytuł:</u></strong> <?php echo esc_html($tytul_prz); ?></span></p>
   </div>
   <?php endif; ?>
 </div>

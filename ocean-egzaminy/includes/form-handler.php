@@ -58,6 +58,11 @@ function oe_obsluga_formularza() {
         oe_przekieruj_z_komunikatem( $redirect, $egzamin_id, 'blad', 'Błąd bezpieczeństwa. Odśwież stronę i spróbuj ponownie.' );
     }
 
+    // ── Zapisy zamknięte po rozpoczęciu egzaminu ──────────────────────────
+    if ( get_post_type( $egzamin_id ) !== 'oe_egzamin' || get_post_status( $egzamin_id ) !== 'publish' || oe_zapisy_zamkniete( $egzamin_id ) ) {
+        oe_przekieruj_z_komunikatem( $redirect, $egzamin_id, 'blad', 'Zapisy na ten egzamin są zamknięte.' );
+    }
+
     // ── Funkcja pomocnicza: zapisz dane i przekieruj z błędem ───────────
     $pola_formularza = [ 'oe_imie', 'oe_nazwisko', 'oe_data_urodzenia', 'oe_miejsce_urodzenia',
         'oe_ulica', 'oe_kod', 'oe_miasto', 'oe_kraj',

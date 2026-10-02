@@ -55,6 +55,7 @@ function oe_rodzaj_puste() {
         'miejsca_praktyka' => array(),
         'karta_wiersze'    => array(),
         'zgoda_rodzicow'   => false,
+        'nawigacja'        => false, // exam includes a navigation task (protocol lists it as an attachment)
         'sekcje'           => array(),
         'liczba_pytan'     => 0,
         'klucz'            => '',
@@ -118,6 +119,7 @@ function oe_rodzaj_normalize( $raw ) {
     $d['miejsca_praktyka'] = oe_rodzaj_lista_tekstu( isset( $raw['miejsca_praktyka'] ) ? $raw['miejsca_praktyka'] : array() );
     $d['karta_wiersze']    = oe_rodzaj_lista_tekstu( isset( $raw['karta_wiersze'] ) ? $raw['karta_wiersze'] : array() );
     $d['zgoda_rodzicow']   = ! empty( $raw['zgoda_rodzicow'] );
+    $d['nawigacja']        = ! empty( $raw['nawigacja'] );
     $d['liczba_pytan']     = isset( $raw['liczba_pytan'] ) ? max( 0, (int) $raw['liczba_pytan'] ) : 0;
     $d['klucz']            = isset( $raw['klucz'] ) ? preg_replace( '/[^ABC]/', '', strtoupper( (string) $raw['klucz'] ) ) : '';
 
@@ -146,10 +148,8 @@ function oe_rodzaj_get( $id ) {
     if ( ! $id || get_post_type( $id ) !== 'oe_rodzaj' || get_post_status( $id ) === 'trash' ) return null;
     $data = get_post_meta( $id, OE_RODZAJ_META, true );
     $data = array_merge( oe_rodzaj_puste(), is_array( $data ) ? $data : array() );
-    // Types saved before document settings existed: every document built in.
-    if ( ! $data['dokumenty'] ) {
-        list( $data['dokumenty'], $data['dokumenty_dodatkowe'] ) = oe_rodzaj_normalize_dokumenty( array(), $data['dokumenty_dodatkowe'] );
-    }
+    // Fill in documents added after the type was saved (and types saved before document settings existed).
+    list( $data['dokumenty'], $data['dokumenty_dodatkowe'] ) = oe_rodzaj_normalize_dokumenty( $data['dokumenty'], $data['dokumenty_dodatkowe'] );
     $data['id']    = $id;
     $data['nazwa'] = get_the_title( $id );
     return $data;
@@ -405,6 +405,32 @@ function oe_utworz_rodzaje_standardowe() {
 // Activation does not run when a zip replaces an older version, so also check on admin load.
 add_action( 'admin_init', 'oe_utworz_rodzaje_standardowe', 5 );
 
+/**
+ * Apply oe_rodzaj_zastosuj_poprawki() once to the types already saved on the
+ * site (renames also update the type name stored on exams). Returns the number
+ * of types changed.
+ */
+function oe_popraw_zapisane_rodzaje() {
+    if ( (int) get_option( 'oe_rodzaje_poprawki', 0 ) >= 1 ) return 0;
+    update_option( 'oe_rodzaje_poprawki', 1 );
+    $n = 0;
+    foreach ( get_posts( array( 'post_type' => 'oe_rodzaj', 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids' ) ) as $rid ) {
+        $przed = oe_rodzaj_get( $rid );
+        if ( ! $przed ) continue;
+        $po = oe_rodzaj_zastosuj_poprawki( $przed );
+        if ( $po === $przed ) continue;
+        update_post_meta( $rid, OE_RODZAJ_META, wp_slash( oe_rodzaj_normalize( $po ) ) );
+        if ( $po['nazwa'] !== $przed['nazwa'] ) {
+            wp_update_post( array( 'ID' => $rid, 'post_title' => $po['nazwa'] ) );
+            oe_rodzaj_synchronizuj_nazwe( $rid );
+        }
+        $n++;
+    }
+    oe_rodzaje_all( true );
+    return $n;
+}
+add_action( 'admin_init', 'oe_popraw_zapisane_rodzaje', 6 );
+
 // ── Edit screen ───────────────────────────────────────────────────────────
 
 add_action( 'add_meta_boxes_oe_rodzaj', function() {
@@ -427,7 +453,7 @@ function oe_metabox_rodzaj( $post ) {
         foreach ( $w['sekcje'] as $s ) {
             $sek[] = array( 'nazwa' => $s['nazwa'], 'min' => $s['min'], 'max' => $s['max'], 'linie' => oe_rodzaj_linie_zadan( $s['zadania'] ) );
         }
-        $wzory[] = array( 'nazwa' => $w['nazwa'], 'skrot' => $w['skrot'], 'karta_wiersze' => $w['karta_wiersze'], 'zgoda_rodzicow' => $w['zgoda_rodzicow'], 'liczba_pytan' => $w['liczba_pytan'], 'sekcje' => $sek );
+        $wzory[] = array( 'nazwa' => $w['nazwa'], 'skrot' => $w['skrot'], 'karta_wiersze' => $w['karta_wiersze'], 'zgoda_rodzicow' => $w['zgoda_rodzicow'], 'nawigacja' => $w['nawigacja'], 'liczba_pytan' => $w['liczba_pytan'], 'sekcje' => $sek );
     }
 
     $klucz_txt = trim( chunk_split( $t['klucz'], 5, ' ' ) );
@@ -453,7 +479,7 @@ function oe_metabox_rodzaj( $post ) {
                     <?php endforeach; ?>
                 </select>
                 <button type="button" class="button" id="oe-r-wzor-wczytaj">Wczytaj zadania i ustawienia</button>
-                <p class="description">Wypełnia skrót, wiersze karty, zgodę rodziców, liczbę pytań i wszystkie sekcje zadań praktycznych według ministerialnego wzoru. Numer decyzji, miejsca i klucz odpowiedzi uzupełnij sama. Zmiany zapisują się dopiero po kliknięciu „Opublikuj” albo „Aktualizuj”.</p>
+                <p class="description">Wypełnia skrót, wiersze karty, zgodę rodziców, zadanie nawigacyjne, liczbę pytań i wszystkie sekcje zadań praktycznych według ministerialnego wzoru. Numer decyzji, miejsca i klucz odpowiedzi uzupełnij sama. Zmiany zapisują się dopiero po kliknięciu „Opublikuj” albo „Aktualizuj”.</p>
             </td>
         </tr>
         <tr>
@@ -479,7 +505,8 @@ function oe_metabox_rodzaj( $post ) {
             <th scope="row"><label for="oe-r-wiersze">Karta egzaminacyjna: wiersze</label></th>
             <td><textarea id="oe-r-wiersze" name="oe_rodzaj[karta_wiersze]" rows="3"><?php echo esc_textarea( implode( "\n", $t['karta_wiersze'] ) ); ?></textarea>
                 <p class="description">Pierwsza tabela karty („zadanie egzaminacyjne:”), jeden wiersz w linii, np. test z teorii, praktyka. Puste: test z teorii i praktyka.</p>
-                <label><input type="checkbox" name="oe_rodzaj[zgoda_rodzicow]" value="1" <?php checked( $t['zgoda_rodzicow'] ); ?>> Na karcie pole „Dołączono zgodę rodziców/opiekunów prawnych”</label></td>
+                <label><input type="checkbox" name="oe_rodzaj[zgoda_rodzicow]" value="1" <?php checked( $t['zgoda_rodzicow'] ); ?>> Na karcie pole „Dołączono zgodę rodziców/opiekunów prawnych”</label><br>
+                <label><input type="checkbox" name="oe_rodzaj[nawigacja]" value="1" <?php checked( $t['nawigacja'] ); ?>> Egzamin z zadaniem nawigacyjnym (protokół wymienia je w załącznikach)</label></td>
         </tr>
         <tr>
             <th scope="row">Zadania praktyczne</th>
@@ -560,6 +587,7 @@ function oe_metabox_rodzaj( $post ) {
             document.getElementById('oe-r-skrot').value = w.skrot;
             document.getElementById('oe-r-wiersze').value = w.karta_wiersze.join('\n');
             document.querySelector('input[name="oe_rodzaj[zgoda_rodzicow]"]').checked = !!w.zgoda_rodzicow;
+            document.querySelector('input[name="oe_rodzaj[nawigacja]"]').checked = !!w.nawigacja;
             document.getElementById('oe-r-pytania').value = w.liczba_pytan;
             box.innerHTML = '';
             w.sekcje.forEach(function(s){ dodajSekcje(s.nazwa, s.min, s.max, s.linie); });

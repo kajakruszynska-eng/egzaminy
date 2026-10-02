@@ -19,8 +19,12 @@ class OE_Docx {
 
     private $paragraphs = [];
     private $mt=720,$mr=720,$mb=720,$ml=720; private $landscape=false;
+    private $numeracja = true; // footer "str. X z Y"
 
     public function __construct() {}
+
+    /** Turn the "str. X z Y" page number footer on or off (on by default). */
+    public function setNumeracja( $on ) { $this->numeracja = (bool) $on; }
 
     public function setMargins($top,$right,$bottom,$left) {
         $this->mt=$top; $this->mr=$right; $this->mb=$bottom; $this->ml=$left;
@@ -91,7 +95,7 @@ class OE_Docx {
         $after  = isset($opts['after'])  ? intval($opts['after'])  : 80;
 
         $pPr = $this->pPr( $align, $before, $after );
-        $rPr = $this->rPr( $bold, $italic, $size );
+        $rPr = $this->rPr( $bold, $italic, $size, ! empty( $opts['underline'] ) );
         $t   = $this->escXml( $tekst );
 
         return "<w:p>{$pPr}<w:r>{$rPr}<w:t xml:space=\"preserve\">{$t}</w:t></w:r></w:p>";
@@ -108,7 +112,7 @@ class OE_Docx {
             $bold   = ! empty( $r['bold'] );
             $italic = ! empty( $r['italic'] );
             $size   = $r['size'] ?? 20;
-            $rPr    = $this->rPr( $bold, $italic, $size );
+            $rPr    = $this->rPr( $bold, $italic, $size, ! empty( $r['underline'] ) );
             $t      = $this->escXml( $r['text'] ?? '' );
             $runsXml .= "<w:r>{$rPr}<w:t xml:space=\"preserve\">{$t}</w:t></w:r>";
         }
@@ -125,10 +129,11 @@ class OE_Docx {
         return "<w:pPr><w:spacing w:before=\"{$before}\" w:after=\"{$after}\"/>{$jc}<w:rPr><w:rFonts w:ascii=\"Arial\" w:hAnsi=\"Arial\"/></w:rPr></w:pPr>";
     }
 
-    private function rPr( $bold, $italic, $size ) {
+    private function rPr( $bold, $italic, $size, $underline = false ) {
         $b = $bold   ? '<w:b/><w:bCs/>' : '<w:b w:val="false"/><w:bCs w:val="false"/>';
         $i = $italic ? '<w:i/><w:iCs/>' : '<w:i w:val="false"/><w:iCs w:val="false"/>';
-        return "<w:rPr><w:rFonts w:ascii=\"Arial\" w:hAnsi=\"Arial\"/>{$b}{$i}<w:u w:val=\"none\"/><w:sz w:val=\"{$size}\"/><w:szCs w:val=\"{$size}\"/></w:rPr>";
+        $u = $underline ? 'single' : 'none';
+        return "<w:rPr><w:rFonts w:ascii=\"Arial\" w:hAnsi=\"Arial\"/>{$b}{$i}<w:u w:val=\"{$u}\"/><w:sz w:val=\"{$size}\"/><w:szCs w:val=\"{$size}\"/></w:rPr>";
     }
 
     private function buildTable( array $rows, array $colWidths, $opts = [] ) {
@@ -228,6 +233,9 @@ class OE_Docx {
         $pgH = $landscape ? self::A4_LS_H : self::A4_H;
         $orient = $landscape ? ' w:orient="landscape"' : '';
         $mt=$this->mt; $mr=$this->mr; $mb=$this->mb; $ml=$this->ml;
+        $stopka     = $this->numeracja ? '
+  <w:footerReference w:type="default" r:id="rIdStopka"/>' : '';
+        $stopka_odl = $this->numeracja ? 340 : 0; // footer distance from the page edge, inside the bottom margin
 
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"
@@ -242,9 +250,9 @@ class OE_Docx {
   mc:Ignorable="w14">
 <w:body>
 ' . $body . '
-<w:sectPr>
+<w:sectPr>' . $stopka . '
   <w:pgSz w:w="' . $pgW . '" w:h="' . $pgH . '"' . $orient . '/>
-  <w:pgMar w:top="' . $mt . '" w:right="' . $mr . '" w:bottom="' . $mb . '" w:left="' . $ml . '" w:header="0" w:footer="0" w:gutter="0"/>
+  <w:pgMar w:top="' . $mt . '" w:right="' . $mr . '" w:bottom="' . $mb . '" w:left="' . $ml . '" w:header="0" w:footer="' . $stopka_odl . '" w:gutter="0"/>
 </w:sectPr>
 </w:body>
 </w:document>';
@@ -265,6 +273,9 @@ class OE_Docx {
         $zip->addFromString( 'word/document.xml', $docXml );
         $zip->addFromString( 'word/_rels/document.xml.rels', $this->docRels() );
         $zip->addFromString( 'word/settings.xml', $this->settings() );
+        if ( $this->numeracja ) {
+            $zip->addFromString( 'word/footer1.xml', $this->footer() );
+        }
         $zip->close();
 
         return $filepath;
@@ -276,8 +287,23 @@ class OE_Docx {
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-  <Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+  <Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>' . ( $this->numeracja ? '
+  <Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' : '' ) . '
 </Types>';
+    }
+
+    /** Footer "str. X z Y" with PAGE and NUMPAGES fields (Word fills them in). */
+    private function footer() {
+        $rPr = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>';
+        $pole = function( $instr ) use ( $rPr ) {
+            return '<w:fldSimple w:instr=" ' . $instr . ' \* MERGEFORMAT "><w:r>' . $rPr . '<w:t>1</w:t></w:r></w:fldSimple>';
+        };
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<w:p><w:pPr><w:jc w:val="right"/><w:spacing w:before="0" w:after="0"/></w:pPr>'
+            . '<w:r>' . $rPr . '<w:t xml:space="preserve">str. </w:t></w:r>' . $pole( 'PAGE' )
+            . '<w:r>' . $rPr . '<w:t xml:space="preserve"> z </w:t></w:r>' . $pole( 'NUMPAGES' ) . '</w:p>
+</w:ftr>';
     }
 
     private function rels() {
@@ -290,7 +316,8 @@ class OE_Docx {
     private function docRels() {
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>' . ( $this->numeracja ? '
+  <Relationship Id="rIdStopka" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>' : '' ) . '
 </Relationships>';
     }
 
