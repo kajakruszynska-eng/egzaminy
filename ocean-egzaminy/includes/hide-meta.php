@@ -45,10 +45,3 @@ add_action( 'wp_head', function() {
     </style>
     <?php
 } );
-
-/**
- * Automatycznie uzupełnia nr decyzji przy zapisie egzaminu jeśli pole jest puste.
- */
-add_filter( 'update_post_metadata', function( $check, $object_id, $meta_key, $meta_value ) {
-    return $check;
-}, 10, 4 );

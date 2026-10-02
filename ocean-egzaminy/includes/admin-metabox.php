@@ -84,15 +84,9 @@ function oe_metabox_egzamin( $post ) {
         <div class="oe-field">
             <label>Nr decyzji MSiT</label>
             <?php
-            $decyzje_mapa = [
-                'Sternik Motorowodny'                                         => 'DSW-ZKS.442.41.2022',
-                'Żeglarz Jachtowy'                                            => 'DSW-ZKS.442.39.2022',
-                'Jachtowy Sternik Morski'                                     => 'DSW-ZKS.442.40.2022',
-                'Motorowodny Sternik Morski'                                  => 'DSW-ZKS.442.42.2022',
-                'Licencja do holowania narciarza wodnego lub innych obiektów' => 'DSW-ZKS.442.43.2022',
-            ];
+            $decyzje_mapa = oe_get_decyzje();
             $wybrany_rodzaj   = get_post_meta( $post->ID, '_oe_rodzaj_egzaminu', true );
-            // Przy nowym wpisie meta jeszcze nie istnieje — użyj pierwszego klucza z $rodzaje
+            // Przy nowym wpisie meta jeszcze nie istnieje - użyj pierwszego klucza z $rodzaje
             if ( ! $wybrany_rodzaj ) {
                 $wybrany_rodzaj = array_key_first( $rodzaje );
             }
@@ -191,7 +185,7 @@ function oe_metabox_egzamin( $post ) {
             <label>Nr rachunku bankowego</label>
             <input type="text" name="oe_nr_konta" id="oe-nr-konta"
                    value="<?php echo $m('_oe_nr_konta') ?: '37 1870 1045 2083 1069 7105 0001'; ?>">
-            <span style="font-size:11px;color:#888">Nest Bank — zmień jeśli inny rachunek</span>
+            <span style="font-size:11px;color:#888">Nest Bank - zmień jeśli inny rachunek</span>
         </div>
         <div class="oe-field">
             <label>Kwota opłaty (PLN)</label>
@@ -207,13 +201,7 @@ function oe_metabox_egzamin( $post ) {
 
     <script>
     (function(){
-        var decyzje = {
-            'Sternik Motorowodny':             'DSW-ZKS.442.41.2022',
-            'Żeglarz Jachtowy':                'DSW-ZKS.442.39.2022',
-            'Jachtowy Sternik Morski':         'DSW-ZKS.442.40.2022',
-            'Motorowodny Sternik Morski':      'DSW-ZKS.442.42.2022',
-            'Licencja do holowania narciarza wodnego lub innych obiektów': 'DSW-ZKS.442.43.2022'
-        };
+        var decyzje = <?php echo wp_json_encode( oe_get_decyzje() ); ?>;
         var oeKomisjaIdx = <?php echo count($komisja); ?>;
 
         function oeInitMetabox() {
@@ -337,7 +325,7 @@ function oe_metabox_zapis( $post ) {
     };
 
     $eid  = get_post_meta( $post->ID, '_oe_egzamin_id', true );
-    $nr   = $eid ? get_post_meta( $eid, '_oe_nr_egzaminu', true ) : '—';
+    $nr   = $eid ? get_post_meta( $eid, '_oe_nr_egzaminu', true ) : '-';
     $status = get_post_field('post_status', $post->ID);
     $statusy = oe_get_statusy();
     $status_label = isset($statusy[$status]) ? $statusy[$status]['label'] : $status;
@@ -379,17 +367,11 @@ add_action( 'save_post_oe_egzamin', function( $post_id ) {
     if ( defined('DOING_AUTOSAVE') && DOING_AUTOSAVE ) return;
     if ( ! current_user_can('edit_post', $post_id) ) return;
 
-    $decyzje_auto = [
-        'Sternik Motorowodny'                                         => 'DSW-ZKS.442.41.2022',
-        'Żeglarz Jachtowy'                                            => 'DSW-ZKS.442.39.2022',
-        'Jachtowy Sternik Morski'                                     => 'DSW-ZKS.442.40.2022',
-        'Motorowodny Sternik Morski'                                  => 'DSW-ZKS.442.42.2022',
-        'Licencja do holowania narciarza wodnego lub innych obiektów' => 'DSW-ZKS.442.43.2022',
-    ];
+    $decyzje_auto = oe_get_decyzje();
     $rodzaj_zapisywany = sanitize_text_field( $_POST['oe_rodzaj_egzaminu'] ?? '' );
     $decyzja_reczna    = sanitize_text_field( $_POST['oe_nr_decyzji'] ?? '' );
     $decyzja_auto      = $decyzje_auto[ $rodzaj_zapisywany ] ?? '';
-    // Jeśli pole decyzji puste lub jest auto-wartością — zawsze wpisz właściwą dla wybranego rodzaju
+    // Jeśli pole decyzji puste lub jest auto-wartością - zawsze wpisz właściwą dla wybranego rodzaju
     if ( ! $decyzja_reczna || in_array( $decyzja_reczna, array_values($decyzje_auto) ) ) {
         update_post_meta( $post_id, '_oe_nr_decyzji', $decyzja_auto );
     } else {

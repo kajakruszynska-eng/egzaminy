@@ -21,7 +21,7 @@ add_action( 'manage_oe_egzamin_posts_custom_column', function( $col, $post_id ) 
             break;
         case 'data_egz':
             $d = get_post_meta( $post_id, '_oe_data_egzaminu', true );
-            echo $d ? esc_html( date_i18n( 'd.m.Y', strtotime( $d ) ) ) : '—';
+            echo $d ? esc_html( date_i18n( 'd.m.Y', strtotime( $d ) ) ) : '-';
             break;
         case 'miejscowosc':
             echo esc_html( get_post_meta( $post_id, '_oe_miejscowosc', true ) );
@@ -86,7 +86,7 @@ add_action( 'manage_oe_zapis_posts_custom_column', function( $col, $post_id ) {
             break;
         case 'egzamin':
             $eid = $m('_oe_egzamin_id');
-            $nr  = $eid ? get_post_meta( $eid, '_oe_nr_egzaminu', true ) : '—';
+            $nr  = $eid ? get_post_meta( $eid, '_oe_nr_egzaminu', true ) : '-';
             echo esc_html( $nr );
             break;
         case 'data_ur':
@@ -162,7 +162,7 @@ add_action( 'restrict_manage_posts', function( $post_type ) {
     ] );
 
     $wybrany = isset( $_GET['oe_egzamin_id'] ) ? intval( $_GET['oe_egzamin_id'] ) : 0;
-    echo '<select name="oe_egzamin_id"><option value="">— Wszystkie egzaminy —</option>';
+    echo '<select name="oe_egzamin_id"><option value="">- Wszystkie egzaminy -</option>';
     foreach ( $egzaminy as $e ) {
         $nr = get_post_meta( $e->ID, '_oe_nr_egzaminu', true );
         $d  = get_post_meta( $e->ID, '_oe_data_egzaminu', true );

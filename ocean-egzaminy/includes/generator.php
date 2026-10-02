@@ -15,9 +15,9 @@ function oe_metabox_generuj( $post ) {
     $dokumenty = array(
         'zgloszenie'    => array('📋','Zgłoszenie egzaminu'),
         'protokol'      => array('📄','Protokół KE'),
-        'zal1'          => array('📊','Zał. nr 1 — wyniki'),
-        'zal2'          => array('⛵','Zał. nr 2 — praktyka'),
-        'zal3'          => array('📜','Zał. nr 3 — zaświadczenia'),
+        'zal1'          => array('📊','Zał. nr 1 - wyniki'),
+        'zal2'          => array('⛵','Zał. nr 2 - praktyka'),
+        'zal3'          => array('📜','Zał. nr 3 - zaświadczenia'),
         'karty'         => array('🪪','Karty egzaminacyjne'),
         'zaswiadczenia' => array('🏅','Zaświadczenia'),
         'arkusze'       => array('📝','Arkusze odpowiedzi'),
@@ -201,7 +201,7 @@ function oe_doc_zgloszenie($eg,$fn) {
     $d = new OE_Docx();
     $komisja = $eg['komisja'];
 
-    // Data i miejsce wystawienia — prawy górny róg (samo, bez podpisu)
+    // Data i miejsce wystawienia - prawy górny róg (samo, bez podpisu)
     $d->pRuns(array(array('text'=>'Katowice, '.$eg['data_utworzenia'],'size'=>18)),array('align'=>'right','after'=>160));
 
     // Nagłówek fundacji po lewej (nie wyśrodkowany jak w innych)
@@ -265,7 +265,7 @@ function oe_doc_zgloszenie($eg,$fn) {
 
     $d->br(2);
 
-    // Stopka — pełna
+    // Stopka - pełna
     $d->pRuns(array(array('text'=>'Katowice, '.$eg['data_utworzenia'],'italic'=>true,'size'=>18)),array('after'=>20));
     $d->pRuns(array(array('text'=>'(miejsce i data wystawienia zgłoszenia)','italic'=>true,'size'=>16)),array('after'=>120));
     $d->pRuns(array(array('text'=>$eg['osoba_podpisujaca']??'','italic'=>true,'size'=>18)),array('after'=>20));
@@ -375,13 +375,6 @@ function oe_doc_zal1($eg,$uu,$fn) {
     $d->table($rows,$cw);
     oe_tabela_komisji($d,$eg);
     $d->download($fn);
-}
-
-// Wrapper dla kompatybilności wstecznej
-function oe_losuj_zadania($u) {
-    $zadania = oe_get_zadania();
-    $zad = isset($zadania['Sternik Motorowodny']) ? $zadania['Sternik Motorowodny'] : array();
-    return oe_losuj_zadania_v2($u, $zad);
 }
 
 // ── ZAŁ. NR 2 ─────────────────────────────────────────────────────────────

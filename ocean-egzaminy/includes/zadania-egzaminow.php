@@ -6,9 +6,9 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  *
  * Struktura zadania:
  *   'nazwa'      => string
- *   'sekcja'     => string  — klucz sekcji
- *   'zawsze_poz' => bool    — zawsze poz. w zał. 2
- *   'zawsze_nie' => bool    — zawsze - - - w zał. 2 (nigdy nie losowane)
+ *   'sekcja'     => string  - klucz sekcji
+ *   'zawsze_poz' => bool    - zawsze poz. w zał. 2
+ *   'zawsze_nie' => bool    - zawsze - - - w zał. 2 (nigdy nie losowane)
  *
  * Sekcje w karcie egzaminacyjnej definiowane przez 'sekcje_karty' per typ.
  * Logika losowania zał. 2 per typ w 'losowanie'.

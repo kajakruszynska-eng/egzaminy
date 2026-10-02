@@ -117,7 +117,7 @@ function oe_obsluga_formularza() {
     }
 
     // ── Utwórz CPT zapis ─────────────────────────────────────────────────
-    $tytul = "{$imie} {$nazwisko} — " . get_post_meta($egzamin_id, '_oe_nr_egzaminu', true);
+    $tytul = "{$imie} {$nazwisko} - " . get_post_meta($egzamin_id, '_oe_nr_egzaminu', true);
 
     $post_data = [
         'post_type'   => 'oe_zapis',

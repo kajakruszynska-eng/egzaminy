@@ -1,16 +1,27 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-function oe_get_nr_decyzji_auto( $rodzaj ) {
-    $mapa = [
-        'Żeglarz Jachtowy'                 => 'DSW-ZKS.442.39.2022',
-        'Jachtowy Sternik Morski'          => 'DSW-ZKS.442.40.2022',
-        'Sternik Motorowodny'              => 'DSW-ZKS.442.41.2022',
-        'Motorowodny Sternik Morski'       => 'DSW-ZKS.442.42.2022',
-        'Licencja do holowania narciarza'  => 'DSW-ZKS.442.43.2022',
+/**
+ * Ministry decision number per exam type. Single source for the metabox,
+ * the save handler and the emails (replaced by exam type data in Phase 3).
+ */
+function oe_get_decyzje() {
+    return [
+        'Sternik Motorowodny'                                         => 'DSW-ZKS.442.41.2022',
+        'Żeglarz Jachtowy'                                            => 'DSW-ZKS.442.39.2022',
+        'Jachtowy Sternik Morski'                                     => 'DSW-ZKS.442.40.2022',
+        'Motorowodny Sternik Morski'                                  => 'DSW-ZKS.442.42.2022',
+        'Licencja do holowania narciarza wodnego lub innych obiektów' => 'DSW-ZKS.442.43.2022',
     ];
+}
+
+function oe_get_nr_decyzji_auto( $rodzaj ) {
+    $mapa = oe_get_decyzje();
+    if ( isset( $mapa[ $rodzaj ] ) ) return $mapa[ $rodzaj ];
+    if ( $rodzaj === '' || $rodzaj === null ) return '';
+    // Tolerate older or shortened labels stored in meta.
     foreach ( $mapa as $klucz => $nr ) {
-        if ( stripos( $rodzaj, $klucz ) !== false ) return $nr;
+        if ( stripos( $rodzaj, $klucz ) !== false || stripos( $klucz, $rodzaj ) !== false ) return $nr;
     }
     return '';
 }
@@ -40,7 +51,7 @@ function oe_wyslij_email_potwierdzenie( $zapis_id ) {
     $kwota_full  = number_format($kwota_raw, 2, ',', ' ') . ' PLN';
     $tytul_prz   = "Opłata za egzamin na patent {$rodzaj}: {$data_fmt}, {$imie} {$nazwisko}";
     $blik_url    = 'https://serwer1816332.home.pl/ocean-wiedzy/ocean_wiedzy/wp-content/uploads/2026/04/Blik_logo.svg-scaled.png';
-    $temat       = "Potwierdzenie zapisu — egzamin {$rodzaj} {$data_fmt}";
+    $temat       = "Potwierdzenie zapisu - egzamin {$rodzaj} {$data_fmt}";
 
     ob_start();
     echo oe_email_naglowek();
@@ -65,7 +76,7 @@ function oe_wyslij_email_potwierdzenie( $zapis_id ) {
       <td style="padding:6px 0">
         <span style="font-size:18px;font-weight:700;color:#1a5276"><?php echo esc_html($kwota_str); ?></span>
         <?php if ($znizka) : ?>
-          <span style="font-size:12px;color:#2e7d32;background:#E8F5E9;padding:2px 8px;border-radius:3px;margin-left:8px">50% — ulga uczniowska/studencka</span><br>
+          <span style="font-size:12px;color:#2e7d32;background:#E8F5E9;padding:2px 8px;border-radius:3px;margin-left:8px">50% - ulga uczniowska/studencka</span><br>
           <span style="font-size:12px;color:#777">cena regularna: <?php echo esc_html($kwota_full); ?></span>
         <?php endif; ?>
       </td>
@@ -88,7 +99,7 @@ function oe_wyslij_email_potwierdzenie( $zapis_id ) {
 
 <?php if ($znizka) : ?>
 <div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:6px;padding:12px 16px;margin:0 0 20px;font-size:13px">
-  <strong style="color:#2e7d32">Ulga 50%</strong> — przysługuje Ci obniżona opłata. <strong>Pamiętaj, żeby zabrać na egzamin ważną legitymację ucznia lub studenta.</strong>
+  <strong style="color:#2e7d32">Ulga 50%</strong> - przysługuje Ci obniżona opłata. <strong>Pamiętaj, żeby zabrać na egzamin ważną legitymację ucznia lub studenta.</strong>
 </div>
 <?php endif; ?>
 
@@ -136,7 +147,7 @@ function oe_wyslij_email_admin_nowy_zapis( $zapis_id ) {
     $kwota      = $znizka ? $kwota_raw / 2 : $kwota_raw;
 
     $admin_email = get_option('admin_email');
-    $temat       = "Nowy zapis: {$imie} {$nazwisko} — {$nr_egz}";
+    $temat       = "Nowy zapis: {$imie} {$nazwisko} - {$nr_egz}";
     $url_zatw    = wp_nonce_url( admin_url("admin-post.php?action=oe_zmien_status&post_id={$zapis_id}&nowy_status=oe_zatwierdzony"), 'oe_zmien_status_' . $zapis_id );
     $url_listy   = admin_url("edit.php?post_type=oe_zapis&oe_egzamin_id={$egzamin_id}");
 
@@ -147,7 +158,7 @@ function oe_wyslij_email_admin_nowy_zapis( $zapis_id ) {
 <h2 style='color:#1a5276;margin:0 0 16px'>Nowy zapis na egzamin</h2>
 <table style='width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px'>
   <tr><td style='padding:7px 12px;background:#f4f6f9;border:1px solid #e1e4e8;width:36%;font-weight:600'>Egzamin</td>
-      <td style='padding:7px 12px;border:1px solid #e1e4e8'>" . esc_html($rodzaj) . " — " . esc_html($nr_egz) . " (" . esc_html($data_fmt) . ")</td></tr>
+      <td style='padding:7px 12px;border:1px solid #e1e4e8'>" . esc_html($rodzaj) . " - " . esc_html($nr_egz) . " (" . esc_html($data_fmt) . ")</td></tr>
   <tr><td style='padding:7px 12px;background:#f4f6f9;border:1px solid #e1e4e8;font-weight:600'>Uczestnik</td>
       <td style='padding:7px 12px;border:1px solid #e1e4e8'><strong>" . esc_html($imie . ' ' . $nazwisko) . "</strong></td></tr>
   <tr><td style='padding:7px 12px;background:#f4f6f9;border:1px solid #e1e4e8;font-weight:600'>E-mail</td>
@@ -183,7 +194,7 @@ function oe_wyslij_email_zmiana_statusu( $zapis_id, $nowy_status ) {
     $data_fmt   = $data_egz ? date_i18n('d.m.Y', strtotime($data_egz)) : '';
 
     if ( $nowy_status === 'oe_zatwierdzony' ) {
-        $temat  = "Miejsce potwierdzone — {$rodzaj} {$data_fmt}";
+        $temat  = "Miejsce potwierdzone - {$rodzaj} {$data_fmt}";
         $tresc  = oe_email_naglowek();
         $tresc .= "
 <h2 style='color:#2e7d32;margin:0 0 16px'>✓ Twoje miejsce zostało potwierdzone</h2>
@@ -207,7 +218,7 @@ function oe_wyslij_email_zmiana_statusu( $zapis_id, $nowy_status ) {
         $tresc .= oe_email_stopka();
 
     } elseif ( $nowy_status === 'oe_odrzucony' ) {
-        $temat  = "Informacja o zapisie — {$rodzaj} {$data_fmt}";
+        $temat  = "Informacja o zapisie - {$rodzaj} {$data_fmt}";
         $tresc  = oe_email_naglowek();
         $tresc .= "
 <h2 style='color:#c62828;margin:0 0 16px'>Informacja o Twoim zapisie</h2>

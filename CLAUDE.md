@@ -12,14 +12,20 @@ Owner: K, freelance developer. She communicates in Polish, so talk to her in Pol
 
 ## Hard constraints
 
-- Host runs PHP 7.4.33 (home.pl). No `match()`, no `fn()` arrow functions, no union types, no named arguments. The `??` operator is fine.
+- Code must run on every PHP from 7.4 to the newest 8.x. The current host runs PHP 7.4.33 (home.pl), a later move to the newest PHP is expected. So: PHP 7.4 syntax only (no `match()`, no `fn()` arrow functions, no union types, no named arguments, no nullsafe `?->`; `??` is fine), and nothing deprecated or removed in PHP 8 (for example no `${var}` string interpolation, no required parameter after an optional one). `bin/check.php` lints on both 7.4 and the newest 8.x.
 - No em dash character anywhere in code, comments, docs or replies.
 - After a coding task, keep the follow-up short: what changed in one or two sentences.
-- Plugin is delivered as a zip that K uploads in WP Admin. Zip layout: `ocean-egzaminy/ocean-egzaminy.php`, `ocean-egzaminy/includes/*.php`, `ocean-egzaminy/vendor/`.
+- Plugin is delivered as a zip that K uploads in WP Admin. Zip layout: `ocean-egzaminy/ocean-egzaminy.php`, `ocean-egzaminy/includes/*.php`. Build it with `php bin/build-zip.php`.
+- Repository: https://github.com/kajakruszynska-eng/egzaminy (branch `main`). Never commit secrets (passwords, hashes, API keys).
 
 ## Layout
 
 ```
+bin/
+  check.php                  pre-finish checks (lint on 7.4 and 8.x, duplicates, forbidden syntax, em dash, BOM, braces, bootstrap)
+  build-zip.php              builds dist/ocean-egzaminy-<version>.zip
+.tools/                      local portable PHP 7.4 and 8.x for checks (git-ignored)
+dist/                        built zips (git-ignored)
 ocean-egzaminy/              plugin root
   ocean-egzaminy.php         bootstrap, requires every include
   includes/
@@ -36,8 +42,6 @@ ocean-egzaminy/              plugin root
     zadania-egzaminow.php    exam task definitions and deterministic drawing
     docx-builder.php         OE_Docx class, DOCX via ZipArchive
     generator.php            9 DOCX documents and the download handler
-    access-guard.php         shared-password gate (to be removed, see plan)
-  vendor/
 docs/
   UNIVERSALIZATION.md        plan for multi-organization version
 ```
@@ -52,11 +56,10 @@ docs/
 
 ## Before you finish any change
 
-1. `php -l` on every PHP file (`for f in $(find . -name '*.php' -not -path './vendor/*'); do php -l "$f"; done`).
-2. Check for duplicate function names: `grep -ho "^function [a-z_0-9]*" -r ocean-egzaminy/includes | sort | uniq -d` must print nothing.
-3. Grep for `fn(` and `match(` and fix any hit that is real code (ignore `preg_match(`).
-4. Check brace balance if you edited with scripts. Past fatal errors came from scripted edits that duplicated a function or truncated a file's end. Prefer small targeted edits over regenerating whole files.
-5. Rebuild the zip from the plugin directory and confirm it contains `ocean-egzaminy/ocean-egzaminy.php`.
+1. `php bin/check.php` must print "All checks passed." It covers lint on PHP 7.4 and 8.x (from `.tools/`, or binaries passed as arguments), duplicate function names, `fn(` and `match(`, em dash, BOM, brace balance, and that the bootstrap requires every include. On Windows: `.tools\php74\php.exe bin\check.php`.
+2. Past fatal errors came from scripted edits that duplicated a function or truncated a file's end. Prefer small targeted edits over regenerating whole files. Save PHP files as UTF-8 without BOM.
+3. `php bin/build-zip.php` rebuilds the zip and confirms it contains `ocean-egzaminy/ocean-egzaminy.php`.
+4. Commit and push to `main`.
 
 ## Known quirks
 

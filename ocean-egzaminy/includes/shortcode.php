@@ -65,7 +65,7 @@ function oe_shortcode_formularz( $atts ) {
 
     $data_fmt = $data ? date_i18n('d.m.Y', strtotime($data)) : '';
 
-    // CSS inline — niezależny od Elementora
+    // CSS inline - niezależny od Elementora
     static $oe_form_css_dodany = false;
     $form_css = '';
     if ( ! $oe_form_css_dodany ) {
@@ -109,7 +109,7 @@ function oe_shortcode_formularz( $atts ) {
                 <div><span class="oe-info-label">Data</span><strong><?php echo esc_html($data_fmt); ?></strong></div>
                 <div><span class="oe-info-label">Miejscowość</span><strong><?php echo esc_html($miejscowosc); ?></strong></div>
                 <?php if ($kwota) : ?><div><span class="oe-info-label">Opłata egzaminacyjna</span><strong><?php echo esc_html($kwota); ?> PLN</strong></div><?php endif; ?>
-                <?php if ($limit > 0) : ?><div><span class="oe-info-label">Wolnych miejsc</span><strong><?php echo isset($wolne) ? $wolne : '—'; ?></strong></div><?php endif; ?>
+                <?php if ($limit > 0) : ?><div><span class="oe-info-label">Wolnych miejsc</span><strong><?php echo isset($wolne) ? $wolne : '-'; ?></strong></div><?php endif; ?>
             </div>
         </div>
 
@@ -185,7 +185,7 @@ function oe_shortcode_formularz( $atts ) {
             <div class="oe-form-pole oe-col-2" style="margin-top:4px">
                 <label class="oe-checkbox-label oe-znizka-label" id="oe-znizka-box-<?php echo $egzamin_id; ?>">
                     <input type="checkbox" name="oe_znizka_mlodzi" value="1" <?php echo !empty($prev['oe_znizka_mlodzi']) ? 'checked' : ''; ?> id="oe-znizka-<?php echo $egzamin_id; ?>" onchange="oeToggleZnizka(this,<?php echo $egzamin_id; ?>,<?php echo floatval($kwota); ?>)">
-                    <span>Mam mniej niż 26 lat i jestem uczniem lub studentem (posiadam ważną legitymację) — przysługuje mi opłata 50%: <strong id="oe-kwota-znizka-<?php echo $egzamin_id; ?>"><?php echo floatval($kwota)/2; ?> PLN</strong> zamiast <?php echo esc_html($kwota); ?> PLN</span>
+                    <span>Mam mniej niż 26 lat i jestem uczniem lub studentem (posiadam ważną legitymację) - przysługuje mi opłata 50%: <strong id="oe-kwota-znizka-<?php echo $egzamin_id; ?>"><?php echo floatval($kwota)/2; ?> PLN</strong> zamiast <?php echo esc_html($kwota); ?> PLN</span>
                 </label>
                 <input type="hidden" name="oe_znizka_zaznaczona" id="oe-znizka-hidden-<?php echo $egzamin_id; ?>" value="0">
             </div>
@@ -214,11 +214,11 @@ function oe_shortcode_formularz( $atts ) {
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SHORTCODE: [lista_egzaminow] — lista nadchodzących egzaminów
+// SHORTCODE: [lista_egzaminow] - lista nadchodzących egzaminów
 // Parametry:
-//   limit="10"          — max liczba wyników (domyślnie 10)
-//   rodzaj="Sternik"    — filtruj po rodzaju (opcjonalnie)
-//   pokaz_minione="nie" — czy pokazywać minione egzaminy (domyślnie nie)
+//   limit="10"          - max liczba wyników (domyślnie 10)
+//   rodzaj="Sternik"    - filtruj po rodzaju (opcjonalnie)
+//   pokaz_minione="nie" - czy pokazywać minione egzaminy (domyślnie nie)
 // ═══════════════════════════════════════════════════════════════════════════
 
 add_shortcode( 'lista_egzaminow', 'oe_shortcode_lista' );
@@ -273,7 +273,7 @@ function oe_shortcode_lista( $atts ) {
         '09'=>'wrz','10'=>'paź','11'=>'lis','12'=>'gru',
     ];
 
-    // Wstrzyknij CSS inline — działa niezależnie od Elementora
+    // Wstrzyknij CSS inline - działa niezależnie od Elementora
     static $oe_lista_css_dodany = false;
     $css_inline = '';
     if ( ! $oe_lista_css_dodany ) {

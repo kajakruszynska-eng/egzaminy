@@ -24,11 +24,10 @@ Counts are from the audit on 2026-10-02. Values are intentionally not repeated h
 | Reply-To email address | `includes/emails.php` (about line 264) |
 | Payment logo URL on the original WordPress host | `includes/emails.php` (lines 42 and 237) |
 | City in document date lines ("Katowice, <date>") | `includes/generator.php` (about lines 205 and 269) |
-| Ministry decision numbers per exam type | duplicated in `includes/admin-metabox.php` (3 places), `includes/emails.php`, and referenced in `generator.php` |
+| Ministry decision numbers per exam type | one map in `oe_get_decyzje()` in `includes/emails.php` (merged in Phase 1), referenced in `admin-metabox.php` and `generator.php` |
 | Exam type names as string keys | about 53 occurrences across `admin-metabox.php`, `emails.php`, `generator.php`, `miejsca-egzaminow.php`, `zadania-egzaminow.php` |
 | Venue lists per exam type | `includes/miejsca-egzaminow.php` (one hardcoded array, includes the organization's own office as a venue) |
 | Commission member roles | `includes/admin-metabox.php` (przewodniczacy, sekretarz, czlonek) |
-| Shared password gate | `includes/access-guard.php`, required first in `ocean-egzaminy.php` |
 | Legal wording (data controller, regulation citations, consent text) | `includes/generator.php` (about lines 614-616), `includes/shortcode.php` |
 
 ## Target architecture
@@ -44,8 +43,8 @@ Counts are from the audit on 2026-10-02. Values are intentionally not repeated h
 
 ## Phases
 
-1. Baseline cleanup. Remove `access-guard.php` and its require. Remove duplicate decision-number maps. Delete dead code. Add the pre-finish checks from CLAUDE.md as a script (`bin/check.sh`). Commit a clean baseline before any refactor.
-2. Settings and capabilities. Add the settings page, replace every hardcoded organization string with a settings read, introduce the two capabilities, add a `bin/build-zip.sh`.
+1. Baseline cleanup. **Done 2026-10-02.** Removed `access-guard.php` and its require, merged the four decision-number maps into `oe_get_decyzje()` (`includes/emails.php`), deleted dead code (`oe_losuj_zadania` wrapper, no-op `update_post_metadata` filter, empty `oe_create_tables`, empty `vendor/`), replaced em dashes with hyphens. Checks and zip build are PHP scripts (`bin/check.php`, `bin/build-zip.php`) instead of shell scripts, so they run on Windows without bash. Until Phase 2, plugin screens and document downloads are gated only by `edit_posts`, which includes the Contributor and Author roles.
+2. Settings and capabilities. Add the settings page, replace every hardcoded organization string with a settings read, introduce the two capabilities.
 3. Data model for exam types and venues. Create exam type storage, migrate the five current types and their venues and tasks from the seed file, replace string-key lookups with exam type IDs, keep a migration for existing `_oe_rodzaj_egzaminu` meta.
 4. Document generation. Today `generator.php` (about 820 lines) builds nine fixed paperwork forms in code. With arbitrary exam types there are two realistic routes: (a) DOCX templates with placeholders that each organization uploads and the plugin fills (flexible, more work for the organization), or (b) keep built-in layouts for the standard forms and add a template route only for custom exam types. Decide this with K before starting, it drives the size of the whole project.
 5. Packaging for distribution. Version number, readme with screenshots, update mechanism (or a documented manual update), uninstall cleanup, text domain and translation file, license choice.
@@ -54,4 +53,4 @@ Counts are from the audit on 2026-10-02. Values are intentionally not repeated h
 
 - Existing data uses the old string-keyed exam types. A migration is required or running exams lose their type.
 - The ministry paperwork layouts and legal citations are specific to Polish sailing licenses. Another country or sport needs different wording, so legal text must come from templates or settings, not code.
-- Hosting is PHP 7.4. If distribution targets other hosts, test on 7.4 and on a current PHP version, and keep 7.4 syntax until K says otherwise.
+- Hosting is PHP 7.4 now and the newest PHP later. Decision (K, 2026-10-02): support both, so keep 7.4 syntax and avoid anything deprecated in PHP 8. `bin/check.php` lints on 7.4 and the newest 8.x.
