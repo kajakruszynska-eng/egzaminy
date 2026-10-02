@@ -27,23 +27,6 @@ function oe_shortcode_formularz( $atts ) {
     $limit      = intval( get_post_meta( $egzamin_id, '_oe_limit_miejsc', true ) );
     $kwota      = get_post_meta( $egzamin_id, '_oe_kwota_oplaty', true );
 
-    // Sprawdź limit miejsc
-    if ( $limit > 0 ) {
-        $zatwierdzone = new WP_Query([
-            'post_type'   => 'oe_zapis',
-            'post_status' => [ 'oe_zatwierdzony', 'oe_oczekuje' ],
-            'meta_query'  => [ [ 'key' => '_oe_egzamin_id', 'value' => $egzamin_id ] ],
-            'fields'      => 'ids',
-            'posts_per_page' => -1,
-        ]);
-        if ( $zatwierdzone->found_posts >= $limit ) {
-            return '<div class="oe-formularz-info" style="padding:16px;background:#FFF3E0;border-left:4px solid #BA7517;border-radius:4px">'
-                 . '<strong>Brak wolnych miejsc.</strong> Wszystkie miejsca na ten egzamin zostały zajęte. Skontaktuj się z organizatorem.'
-                 . '</div>';
-        }
-        $wolne = $limit - $zatwierdzone->found_posts;
-    }
-
     // Success/error message and form data after redirect (?oe_msg=<token>, see form-handler.php)
     $msg_sukces = '';
     $msg_blad   = '';
@@ -58,6 +41,24 @@ function oe_shortcode_formularz( $atts ) {
         if ( ! empty( $komunikat['dane'] ) && is_array( $komunikat['dane'] ) ) {
             $prev = $komunikat['dane'];
         }
+    }
+
+    // Sprawdź limit miejsc. Checked after reading the message: the person who just
+    // took the last seat must see "Zapis przyjęty", not "Brak wolnych miejsc".
+    if ( $limit > 0 ) {
+        $zatwierdzone = new WP_Query([
+            'post_type'   => 'oe_zapis',
+            'post_status' => [ 'oe_zatwierdzony', 'oe_oczekuje' ],
+            'meta_query'  => [ [ 'key' => '_oe_egzamin_id', 'value' => $egzamin_id ] ],
+            'fields'      => 'ids',
+            'posts_per_page' => -1,
+        ]);
+        if ( $zatwierdzone->found_posts >= $limit && ! $msg_sukces ) {
+            return '<div class="oe-formularz-info" style="padding:16px;background:#FFF3E0;border-left:4px solid #BA7517;border-radius:4px">'
+                 . '<strong>Brak wolnych miejsc.</strong> Wszystkie miejsca na ten egzamin zostały zajęte. Skontaktuj się z organizatorem.'
+                 . '</div>';
+        }
+        $wolne = max( 0, $limit - $zatwierdzone->found_posts );
     }
 
     $data_fmt = $data ? date_i18n('d.m.Y', strtotime($data)) : '';

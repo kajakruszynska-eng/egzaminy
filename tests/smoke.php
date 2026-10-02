@@ -383,6 +383,20 @@ $nowe = get_posts( array( 'post_type' => 'oe_zapis', 'post_status' => 'oe_oczeku
 t_ok( count( $nowe ) === 1, 'successful signup creates one pending oe_zapis' );
 foreach ( $nowe as $pid ) wp_delete_post( $pid, true );
 
+// Taking the last free seat: the person must see the success message, not "no free seats".
+update_post_meta( $eid, '_oe_limit_miejsc', 2 ); // 1 approved already, so this signup fills the exam
+$loc = t_submit( wp_slash( array_merge( $form, array( 'oe_email' => 'ostatni@example.test' ) ) ) );
+list( , $html ) = t_render_after( $loc, $eid );
+t_ok( strpos( $html, 'Zapis przyjęty!' ) !== false && strpos( $html, 'Brak wolnych miejsc' ) === false, 'last free seat: signup sees the success message' );
+t_ok( strpos( $html, '<form class="oe-formularz"' ) === false, 'last free seat: no form after success' );
+$html = do_shortcode( '[formularz_egzaminu id="' . $eid . '"]' );
+t_ok( strpos( $html, 'Brak wolnych miejsc' ) !== false, 'full exam: other visitors see "no free seats"' );
+$loc = t_submit( wp_slash( array_merge( $form, array( 'oe_email' => 'za-pozno@example.test' ) ) ) );
+list( , $html ) = t_render_after( $loc, $eid );
+t_ok( strpos( $html, 'Brak wolnych miejsc' ) !== false && count( get_posts( array( 'post_type' => 'oe_zapis', 'post_status' => 'oe_oczekuje', 'numberposts' => -1, 'fields' => 'ids' ) ) ) === 1, 'full exam: further signups are refused' );
+foreach ( get_posts( array( 'post_type' => 'oe_zapis', 'post_status' => 'oe_oczekuje', 'numberposts' => -1, 'fields' => 'ids' ) ) as $pid ) wp_delete_post( $pid, true );
+update_post_meta( $eid, '_oe_limit_miejsc', 10 );
+
 $draft = get_default_post_to_edit( 'oe_egzamin', true );
 ob_start();
 oe_metabox_egzamin( $draft );
