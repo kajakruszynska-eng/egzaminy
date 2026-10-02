@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Zapisy na Egzaminy
  * Description: System zapisów uczestników na egzaminy żeglarskie z panelem admina i generowaniem dokumentów.
- * Version: 1.3.0
+ * Version: 1.3.1
  * Author: Ocean Wiedzy
  * Text Domain: ocean-egzaminy
  * Requires PHP: 7.4
@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 define( 'OE_PATH', plugin_dir_path( __FILE__ ) );
 define( 'OE_URL',  plugin_dir_url( __FILE__ ) );
-define( 'OE_VERSION', '1.3.0' );
+define( 'OE_VERSION', '1.3.1' );
 
 require_once OE_PATH . 'includes/settings.php';
 require_once OE_PATH . 'includes/capabilities.php';

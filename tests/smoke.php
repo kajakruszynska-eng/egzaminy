@@ -609,6 +609,32 @@ wp_delete_attachment( $att_osoba, true );
 foreach ( $extra_z as $id ) wp_delete_post( $id, true );
 t_issues();
 
+// ── Exam without approved participants ──────────────────────────────────
+echo "[no approved participants]\n";
+$e0 = wp_insert_post( array( 'post_type' => 'oe_egzamin', 'post_status' => 'publish', 'post_title' => 'Pusty' ) );
+update_post_meta( $e0, '_oe_rodzaj_egzaminu', 'Sternik Motorowodny' );
+oe_migruj_rodzaje_egzaminow();
+$z0 = wp_insert_post( array( 'post_type' => 'oe_zapis', 'post_status' => 'oe_oczekuje', 'post_title' => 'Oczekuje' ) );
+update_post_meta( $z0, '_oe_egzamin_id', $e0 );
+ob_start();
+oe_metabox_generuj( get_post( $e0 ) );
+$html = ob_get_clean();
+t_ok( strpos( $html, 'Brak zatwierdzonych uczestników' ) !== false && substr_count( $html, 'brak zatwierdzonych' ) >= 3 && strpos( $html, 'typ=karty' ) === false, 'generate box warns and disables per-participant documents' );
+list( $f, $o ) = t_generate( 'karty', $e0, $tmpdir . '/out-pusty.docx' );
+t_ok( $f === '' && strpos( $o, 'Brak zatwierdzonych uczestników' ) !== false, 'karty without approved participants: message instead of an empty file' );
+list( $f, $o ) = t_generate( 'zal1', $e0, $tmpdir . '/out-pusty-zal1.docx' );
+t_ok( $f !== '', 'list documents still download without participants' );
+ob_start();
+oe_metabox_egzamin( get_post( $e0 ) );
+$html = ob_get_clean();
+preg_match( '/var oeZadania = (\{.*?\});\n/', $html, $mz );
+$podglad = isset( $mz[1] ) ? json_decode( $mz[1], true ) : array();
+$sm_lista = isset( $podglad[ $sm['id'] ] ) ? $podglad[ $sm['id'] ][0]['zadania'] : array();
+t_ok( strpos( $html, 'oe-zadania-podglad' ) !== false && in_array( 'kierowanie załogą (zawsze zaliczone)', $sm_lista, true ), 'exam screen previews the practical tasks of its type' );
+wp_delete_post( $z0, true );
+wp_delete_post( $e0, true );
+t_issues();
+
 array_map( 'unlink', glob( $tmpdir . '/*' ) ?: array() );
 @rmdir( $tmpdir );
 

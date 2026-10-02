@@ -25,13 +25,23 @@ function oe_metabox_generuj( $post ) {
         'arkusze_wzor'  => '📋',
     );
     $dokumenty = oe_egzamin_dokumenty( oe_egzamin_rodzaj( $post->ID ) );
+    $n_uczestnikow = count( oe_get_uu( $post->ID ) );
+    $url_zapisy    = admin_url( 'edit.php?post_type=oe_zapis&oe_egzamin_id=' . $post->ID );
     echo '<style>.oe-gb{display:flex;align-items:center;gap:8px;width:100%;margin-bottom:6px;padding:7px 10px;background:#f6f7f7;border:1px solid #ddd;border-radius:4px;font-size:13px;font-family:inherit;text-decoration:none;color:#1e1e1e}.oe-gb:hover{background:#e8f5e9;border-color:#a5d6a7;color:#1e1e1e}.oe-gb-off{opacity:.6;cursor:not-allowed}</style>';
+    if ( $n_uczestnikow ) {
+        echo '<p style="font-size:12px;margin:0 0 8px">Zatwierdzeni uczestnicy: <strong>' . (int) $n_uczestnikow . '</strong></p>';
+    } else {
+        echo '<p style="font-size:12px;margin:0 0 8px;padding:8px;background:#fff8e5;border-left:3px solid #dba617">Brak zatwierdzonych uczestników. Karty, zaświadczenia i arkusze tworzą stronę dla każdej zatwierdzonej osoby. <a href="' . esc_url( $url_zapisy ) . '">Zatwierdź zapisy</a>.</p>';
+    }
     if ( ! $dokumenty ) {
         echo '<p style="font-size:12px;color:#888">Wszystkie dokumenty są wyłączone w typie egzaminu.</p>';
     }
     foreach ( $dokumenty as $dok ) {
         $ikona = isset( $ikony[ $dok['key'] ] ) && $dok['tryb'] === 'wbudowany' ? $ikony[ $dok['key'] ] : '🗎';
         $opis  = $dok['tryb'] === 'szablon' ? 'szablon' : '';
+        if ( $dok['problem'] === '' && ! $n_uczestnikow && oe_dokument_na_uczestnika( $dok ) ) {
+            $dok['problem'] = 'brak zatwierdzonych';
+        }
         if ( $dok['problem'] !== '' ) {
             echo "<span class='oe-gb oe-gb-off' title='" . esc_attr( $dok['problem'] ) . "'><span style='font-size:16px'>{$ikona}</span><span>" . esc_html( $dok['label'] ) . "</span><span style='margin-left:auto;font-size:11px;color:#b32d2e'>" . esc_html( $dok['problem'] ) . "</span></span>";
             continue;
@@ -40,6 +50,12 @@ function oe_metabox_generuj( $post ) {
         echo "<a href='".esc_url($url)."' class='oe-gb'><span style='font-size:16px'>{$ikona}</span><span>".esc_html($dok['label'])."</span><span style='margin-left:auto;font-size:11px;color:#999'>" . esc_html( trim( $opis . ' ↓ docx' ) ) . "</span></a>";
     }
     echo '<p style="font-size:11px;color:#888;margin-top:8px">Tylko zatwierdzeni uczestnicy.</p>';
+}
+
+/** True for documents that contain one page per approved participant (empty without participants). */
+function oe_dokument_na_uczestnika( $dok ) {
+    if ( $dok['tryb'] === 'szablon' ) return ! empty( $dok['na_uczestnika'] );
+    return in_array( $dok['key'], array( 'karty', 'zaswiadczenia', 'arkusze' ), true );
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────
@@ -80,6 +96,14 @@ function oe_handle_generuj_docx() {
         if ($d['key'] === $typ) $dok = $d;
     }
     if (!$dok) wp_die('Ten dokument jest wyłączony dla tego typu egzaminu.');
+    if (!$uu && oe_dokument_na_uczestnika($dok)) {
+        wp_die(
+            '<p><strong>Brak zatwierdzonych uczestników.</strong></p><p>Dokument „' . esc_html($dok['label']) . '” zawiera stronę dla każdej zatwierdzonej osoby, więc bez nich byłby pusty. Zmień status zapisów na „Zatwierdzony”.</p>'
+            . '<p><a href="' . esc_url(admin_url('edit.php?post_type=oe_zapis&oe_egzamin_id=' . $eid)) . '">Przejdź do zapisów tego egzaminu</a></p>',
+            'Brak zatwierdzonych uczestników',
+            array('response' => 200, 'back_link' => true)
+        );
+    }
 
     if ($dok['tryb'] === 'szablon') {
         $fn = isset($fn_map[$typ]) ? $fn_map[$typ] : $prefix . '_' . sanitize_file_name(oe_ascii(str_replace(' ', '_', $dok['label']))) . '.docx';

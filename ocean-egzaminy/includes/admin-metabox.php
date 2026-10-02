@@ -84,6 +84,10 @@ function oe_metabox_egzamin( $post ) {
             <?php elseif ( ! $rodzaj_id && $rodzaj_stary !== '' ) : ?>
                 <span style="font-size:11px;color:#b32d2e">Zapisany rodzaj „<?php echo esc_html( $rodzaj_stary ); ?>” nie pasuje do żadnego typu. Wybierz typ z listy.</span>
             <?php endif; ?>
+            <details id="oe-zadania-podglad" style="font-size:12px;color:#555">
+                <summary style="cursor:pointer">Zadania praktyczne z typu egzaminu (uzupełniane automatycznie)</summary>
+                <div class="oe-zadania-lista"></div>
+            </details>
         </div>
         <div class="oe-field">
             <label>Nr egzaminu (w rejestrze)</label>
@@ -207,11 +211,49 @@ function oe_metabox_egzamin( $post ) {
         <?php
         $js_decyzje = array();
         $js_miejsca = array();
+        $js_zadania = array();
         foreach ( $rodzaje as $rid => $typ ) {
             $js_decyzje[ $rid ] = $typ['nr_decyzji'];
             $js_miejsca[ $rid ] = array( 'teoria' => $typ['miejsca_teoria'], 'praktyka' => $typ['miejsca_praktyka'] );
+            $js_zadania[ $rid ] = array();
+            foreach ( $typ['sekcje'] as $s ) {
+                $lista = array();
+                foreach ( $s['zadania'] as $z ) {
+                    $lista[] = $z['nazwa'] . ( $z['zawsze_poz'] ? ' (zawsze zaliczone)' : ( $z['zawsze_nie'] ? ' (nielosowane)' : '' ) );
+                }
+                $js_zadania[ $rid ][] = array( 'nazwa' => $s['nazwa'], 'losuj' => $s['min'] === $s['max'] ? (string) $s['min'] : $s['min'] . '-' . $s['max'], 'zadania' => $lista );
+            }
         }
         ?>
+        var oeZadania = <?php echo wp_json_encode( (object) $js_zadania ); ?>;
+        function oeZadaniaPodglad(rodzaj) {
+            var box = document.querySelector('#oe-zadania-podglad .oe-zadania-lista');
+            if (!box) return;
+            var sekcje = oeZadania[rodzaj] || [];
+            box.innerHTML = '';
+            if (!sekcje.length) {
+                box.textContent = 'Ten typ nie ma zadań praktycznych.';
+                return;
+            }
+            sekcje.forEach(function(s) {
+                var p = document.createElement('p');
+                p.style.margin = '6px 0 2px';
+                var b = document.createElement('strong');
+                b.textContent = s.nazwa;
+                p.appendChild(b);
+                if (s.losuj !== '0') p.appendChild(document.createTextNode(' (losowane: ' + s.losuj + ')'));
+                var ul = document.createElement('ul');
+                ul.style.margin = '0 0 0 18px';
+                ul.style.listStyle = 'disc';
+                s.zadania.forEach(function(z) {
+                    var li = document.createElement('li');
+                    li.textContent = z;
+                    ul.appendChild(li);
+                });
+                box.appendChild(p);
+                box.appendChild(ul);
+            });
+        }
         var decyzje = <?php echo wp_json_encode( (object) $js_decyzje ); ?>;
         var oeKomisjaIdx = <?php echo count($komisja); ?>;
 
@@ -293,8 +335,10 @@ function oe_metabox_egzamin( $post ) {
             var selRodzaj = document.querySelector('select[name="oe_rodzaj_id"]');
             if (selRodzaj) {
                 oeOdswiezMiejsca(selRodzaj.value);
+                oeZadaniaPodglad(selRodzaj.value);
                 selRodzaj.addEventListener('change', function() {
                     oeOdswiezMiejsca(this.value);
+                    oeZadaniaPodglad(this.value);
                 });
             }
         });
